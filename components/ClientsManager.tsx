@@ -69,20 +69,45 @@ export default function ClientsManager() {
     setShowModal(true)
   }
 
-  const handleDelete = async (id: string, nombreCli: string) => {
-    if (!window.confirm(`¿Estás seguro de eliminar permanentemente al cliente ${nombreCli}? Esta acción no se puede deshacer si no tiene órdenes asociadas.`)) {
-      return
-    }
-    
-    setLoading(true)
+  async function handleBorrarCliente(id: string) {
+    if (!window.confirm("¿Deseas eliminar este cliente?")) return;
     try {
-      const { error } = await supabase.from('clientes').delete().eq('id', id)
-      if (error) throw error
-      alert('Cliente eliminado correctamente.')
-      fetchClientes()
-    } catch (error: any) {
-      alert(`No se pudo eliminar el cliente (probablemente tiene órdenes asociadas). Error: ${error.message}`)
-      setLoading(false)
+      const { error } = await supabase.from('clientes').delete().eq('id', id);
+      if (error) {
+        if (error.code === '23503') alert("No se puede eliminar: El cliente tiene órdenes registradas.");
+        else alert("Error al eliminar: " + error.message);
+        return;
+      }
+      setClientes((prev: any[]) => prev.filter((c: any) => c.id !== id));
+    } catch (err) {
+      console.error("Excepción al borrar cliente:", err);
+    }
+  }
+
+  async function handleCrearCliente(nuevoCliente: any) {
+    try {
+      const { error } = await supabase.from('clientes').insert([nuevoCliente]);
+      if (error) {
+        if (error.code === '23505') alert("Error: La Cédula/RIF ya se encuentra registrada.");
+        else alert("Error al guardar cliente: " + error.message);
+        return;
+      }
+      await fetchClientes();
+    } catch (err) {
+      console.error("Excepción al crear cliente:", err);
+    }
+  }
+
+  async function handleEditarCliente(id: string, datos: any) {
+    try {
+      const { error } = await supabase.from('clientes').update(datos).eq('id', id);
+      if (error) {
+        alert("Error al actualizar cliente: " + error.message);
+        return;
+      }
+      await fetchClientes();
+    } catch (err) {
+      console.error("Excepción al editar cliente:", err);
     }
   }
 
@@ -95,25 +120,17 @@ export default function ClientsManager() {
       nombre,
       cedula_rif: cedula,
       telefono,
-      email, // Si falla por schema, habría que usar 'direccion' o añadir la columna en PG
-      direccion: email // Fallback rápido si email no existe
+      email,
+      direccion: email
     }
 
     try {
       if (isEditing && editingId) {
-        // UPDATE
-        const { error } = await supabase.from('clientes').update(payload).eq('id', editingId)
-        if (error) throw error
-        alert('Cliente actualizado exitosamente.')
+        await handleEditarCliente(editingId, payload);
       } else {
-        // INSERT
-        const { error } = await supabase.from('clientes').insert([payload])
-        if (error) throw error
-        alert('Cliente registrado exitosamente.')
+        await handleCrearCliente(payload);
       }
-      
       setShowModal(false)
-      fetchClientes()
     } catch (err: any) {
       setErrorMsg(err.message || 'Error procesando la solicitud.')
     } finally {
@@ -159,7 +176,7 @@ export default function ClientsManager() {
                       <Edit className="w-3.5 h-3.5" /> Editar
                     </button>
                     <button 
-                      onClick={() => handleDelete(cli.id, cli.nombre)}
+                      onClick={() => handleBorrarCliente(cli.id)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium rounded-lg text-xs transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" /> Eliminar

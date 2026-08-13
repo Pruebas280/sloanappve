@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
+import { useRouter } from 'next/navigation'
 import { Users, Plus, Edit, Trash2, X } from 'lucide-react'
 
 // Cliente normal para consultas
@@ -23,6 +24,7 @@ interface UsuarioInfo {
 }
 
 export default function UserManagement() {
+  const router = useRouter()
   const [usuarios, setUsuarios] = useState<UsuarioInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -35,6 +37,7 @@ export default function UserManagement() {
   const [nombre, setNombre] = useState('')
   const [cedula, setCedula] = useState('')
   const [telefono, setTelefono] = useState('')
+  const [direccion, setDireccion] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rol, setRol] = useState('vendedor')
@@ -42,7 +45,7 @@ export default function UserManagement() {
 
   const fetchUsuarios = async () => {
     setLoading(true)
-    const { data, error } = await supabase.from('usuarios').select('*').order('fecha_creacion', { ascending: false })
+    const { data, error } = await supabase.from('perfiles').select('*').order('fecha_creacion', { ascending: false })
     if (!error && data) {
       setUsuarios(data)
     }
@@ -59,6 +62,7 @@ export default function UserManagement() {
     setNombre('')
     setCedula('')
     setTelefono('')
+    setDireccion('')
     setEmail('')
     setPassword('')
     setRol('vendedor')
@@ -83,15 +87,49 @@ export default function UserManagement() {
     
     setLoading(true)
     try {
-      // Eliminar de public.usuarios
-      // Nota: Idealmente se debería eliminar de auth.users a través del dashboard de Supabase 
-      // o con un Edge Function. Aquí borramos el perfil, bloqueando su rol/autorización.
-      const { error } = await supabase.from('usuarios').delete().eq('id', id)
-      if (error) throw error
-      alert('Perfil de usuario eliminado/inactivado.')
-      fetchUsuarios()
+      const cleanId = String(id).trim();
+      if (!cleanId) {
+        setLoading(false);
+        return;
+      }
+
+      // Intentar borrado en la tabla 'perfiles'
+      const { error } = await supabase
+        .from('perfiles')
+        .delete()
+        .eq('id', cleanId);
+
+      if (error) {
+        console.error("Error al borrar en usuarios:", error);
+        
+        // Si el registro está referenciado en 'ordenes', 'pagos', etc. (Error 23503)
+        if (error.code === '23503') {
+          const desactivar = window.confirm("Este usuario tiene registros u operaciones vinculadas. ¿Deseas desactivarlo en lugar de eliminarlo permanentemente?");
+          if (desactivar) {
+            // Nota: Se asume que la columna 'activo' existe. Si no, ajustar.
+            await supabase
+              .from('perfiles')
+              .update({ activo: false } as any) // as any en caso de que la interfaz no la tenga
+              .eq('id', cleanId);
+            alert('Usuario desactivado correctamente.');
+          }
+        } else {
+          alert("No se pudo eliminar el registro: " + error.message);
+          setLoading(false);
+          return;
+        }
+      } else {
+        alert('Perfil de usuario eliminado exitosamente.')
+      }
+
+      // Actualizar estado local en React
+      setUsuarios(prev => prev.filter(item => item.id !== cleanId));
+      await fetchUsuarios();
+
     } catch (err: any) {
+      console.error("Excepción en borrado:", err);
       alert(`Error al eliminar: ${err.message}`)
+    } finally {
       setLoading(false)
     }
   }
@@ -104,27 +142,31 @@ export default function UserManagement() {
     try {
       if (isEditing && editingId) {
         // UPDATE (Solo public.usuarios)
-        const { error } = await supabase.from('usuarios').update({ nombre, rol }).eq('id', editingId)
+        const { error: rpcError } = await supabase.rpc('cambiar_rol_usuario', { p_usuario_id: editingId, p_nuevo_rol: rol })
+        if (rpcError) throw rpcError
+        const { error } = await supabase.from('perfiles').update({ nombre }).eq('id', editingId)
         if (error) throw error
-        alert('Usuario actualizado exitosamente.')
+        alert('Rol actualizado correctamente')
+        setUsuarios(prev => prev.map(u => u.id === editingId ? { ...u, nombre, rol } : u))
       } else {
         // INSERT (Auth + public.usuarios)
         const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
           email,
           password,
           options: {
-            data: { nombre, cedula_rif: cedula, telefono, rol }
+            data: { nombre, cedula_rif: cedula, telefono, direccion, rol }
           }
         })
 
         if (authError) throw new Error(authError.message)
         if (!authData.user) throw new Error('No se pudo crear el usuario.')
 
-        const { error: insertError } = await supabase.from('usuarios').upsert({
+        const { error: insertError } = await supabase.from('perfiles').upsert({
           id: authData.user.id,
           email,
           nombre,
-          rol
+          rol,
+          direccion
         })
         
         if (insertError) console.warn("Fallo inserción manual, tal vez el trigger ya lo hizo:", insertError)
@@ -133,6 +175,7 @@ export default function UserManagement() {
 
       setShowModal(false)
       fetchUsuarios()
+      router.refresh()
     } catch (err: any) {
       setErrorMsg(err.message || 'Error al procesar usuario.')
     } finally {
@@ -223,6 +266,12 @@ export default function UserManagement() {
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Teléfono *</label>
                     <input type="text" required value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
                   </div>
+                </div>
+              )}
+              {!isEditing && (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Dirección</label>
+                  <input type="text" value={direccion} onChange={e => setDireccion(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
                 </div>
               )}
               <div>

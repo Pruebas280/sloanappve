@@ -28,6 +28,7 @@ export interface Cliente {
   id: string
   nombre: string
   cedula_rif: string
+  direccion?: string
 }
 
 export interface CartItem extends Producto {
@@ -46,10 +47,17 @@ export default function VendedorPOS() {
   
   // Estado del Formulario de Orden
   const [selectedCliente, setSelectedCliente] = useState<string>('')
-  const [metodoPago, setMetodoPago] = useState<string>('TRANSFERENCIA')
+  const [metodoPago, setMetodoPago] = useState<string>('Zelle')
+  const [modalidadPago, setModalidadPago] = useState<string>('Contado')
+  const [diasCredito, setDiasCredito] = useState<number>(0)
+  const [inicialMonto, setInicialMonto] = useState<number>(0)
+  const [condicionEntrega, setCondicionEntrega] = useState<string>('Retiro')
+  const [direccionEnvio, setDireccionEnvio] = useState<string>('')
+  const [precioPersonalizado, setPrecioPersonalizado] = useState<boolean>(false)
+  const [totalPersonalizado, setTotalPersonalizado] = useState<number>(0)
   const [showClientModal, setShowClientModal] = useState<boolean>(false)
   const [comprobante, setComprobante] = useState<File | null>(null)
-  const [tasaCambio, setTasaCambio] = useState<number>(36.5) // Tasa por defecto o editable
+  const [tasaCambio, setTasaCambio] = useState<number>(36.5)
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const [mensaje, setMensaje] = useState<{ tipo: 'exito' | 'error', texto: string } | null>(null)
 
@@ -88,7 +96,6 @@ export default function VendedorPOS() {
 
   // Totales
   const totalUSD = cart.reduce((acc, item) => acc + (item.precio_usd * item.cantidad_carrito), 0)
-  const totalBS = cart.reduce((acc, item) => acc + (item.precio_bs * item.cantidad_carrito), 0)
 
   // Manejador del Carrito (Sumar/Restar con validación de stock)
   const handleUpdateCart = (producto: Producto, delta: number) => {
@@ -128,6 +135,11 @@ export default function VendedorPOS() {
     if (!selectedCliente) return setMensaje({ tipo: 'error', texto: 'Selecciona un cliente' })
     if (!comprobante) return setMensaje({ tipo: 'error', texto: 'Debes adjuntar el comprobante de pago' })
 
+    const totalVenta = precioPersonalizado ? (Number(totalPersonalizado) || 0) : (Number(totalUSD) || 0)
+    if (modalidadPago === 'Crédito' && Number(inicialMonto) > totalVenta) {
+      return setMensaje({ tipo: 'error', texto: 'La inicial no puede superar el monto total de la venta' })
+    }
+
     setIsSubmitting(true)
     setMensaje(null)
 
@@ -153,13 +165,19 @@ export default function VendedorPOS() {
       const ordenPayload = {
         vendedor_id: user.id || null,
         cliente_id: selectedCliente || null,
-        total_usd: Number(totalUSD),
-        total_bs: Number(totalBS),
-        metodo_pago: metodoPago || 'Efectivo',
-        estado: 'pendiente',
+        total_usd: precioPersonalizado ? (Number(totalPersonalizado) || 0) : (Number(totalUSD) || 0),
+        metodo_pago: metodoPago,
+        modalidad_pago: modalidadPago,
+        inicial_monto: modalidadPago === 'Crédito' ? (Number(inicialMonto) || 0) : 0,
+        dias_credito: modalidadPago === 'Crédito' ? (Number(diasCredito) || 0) : 0,
+        condicion_entrega: condicionEntrega,
+        direccion_envio: direccionEnvio || clientes.find(c => c.id === selectedCliente)?.direccion || 'Sin dirección especificada',
+        precio_personalizado: precioPersonalizado ? (Number(totalPersonalizado) || null) : null,
+        estado: 'aprobado',
+        observaciones: 'Orden registrada desde Vendedor POS App',
         comprobante_pago_url: publicUrl,
-        tasa_cambio: Number(tasaCambio),
-        observaciones: 'Orden registrada desde Vendedor POS App'
+        total_bs: 0,
+        tasa_cambio: 0
       }
 
       const { data: ordenData, error: ordenError } = await supabase
@@ -170,16 +188,16 @@ export default function VendedorPOS() {
 
       if (ordenError) throw new Error(`Fallo creando orden: ${ordenError.message}`)
 
-      // 4. Insertar los items en 'detalles_orden'
+      // 4. Insertar los items en 'orden_items'
       const ordenItems = cart.map(item => ({
         orden_id: ordenData.id,
         producto_id: item.id,
         cantidad: item.cantidad_carrito,
         precio_unitario_usd: item.precio_usd,
-        precio_unitario_bs: item.precio_bs
+        precio_unitario_bs: 0
       }))
 
-      const { error: itemsError } = await supabase.from('detalles_orden').insert(ordenItems)
+      const { error: itemsError } = await supabase.from('orden_items').insert(ordenItems)
       if (itemsError) throw new Error(`Fallo registrando items: ${itemsError.message}`)
 
       // 5. Descontar stock manualmente en la tabla de 'productos'
@@ -199,7 +217,13 @@ export default function VendedorPOS() {
       setCart([])
       setComprobante(null)
       setSelectedCliente('')
-      setMetodoPago('TRANSFERENCIA')
+      setMetodoPago('Zelle')
+      setModalidadPago('Contado')
+      setInicialMonto(0)
+      setDiasCredito(0)
+      setCondicionEntrega('Retiro')
+      setDireccionEnvio('')
+      setPrecioPersonalizado(false)
       
       // Actualizar el inventario visualmente sin recargar la página
       setProductos(prev => prev.map(p => {
@@ -251,7 +275,6 @@ export default function VendedorPOS() {
                   <div className="flex justify-between items-end mb-4">
                     <div>
                       <p className="text-xl font-black text-blue-600">${prod.precio_usd.toFixed(2)}</p>
-                      <p className="text-sm font-medium text-slate-500">Bs. {prod.precio_bs.toFixed(2)}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-lg text-xs font-bold ${prod.stock_disponible > 5 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                       Stock: {prod.stock_disponible}
@@ -326,10 +349,6 @@ export default function VendedorPOS() {
                 <span className="text-blue-200 font-medium">Total USD:</span>
                 <span className="text-2xl font-black">${totalUSD.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center border-t border-blue-800 pt-1">
-                <span className="text-blue-300 font-medium text-sm">Total BS:</span>
-                <span className="text-lg font-bold text-blue-100">Bs. {totalBS.toFixed(2)}</span>
-              </div>
             </div>
 
             {/* Selector de Cliente */}
@@ -347,7 +366,12 @@ export default function VendedorPOS() {
               <select 
                 className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors"
                 value={selectedCliente}
-                onChange={(e) => setSelectedCliente(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setSelectedCliente(val)
+                  const clienteSel = clientes.find(c => c.id === val)
+                  setDireccionEnvio(clienteSel?.direccion || '')
+                }}
                 required
               >
                 <option value="" disabled>Seleccionar cliente...</option>
@@ -366,11 +390,96 @@ export default function VendedorPOS() {
                 onChange={(e) => setMetodoPago(e.target.value)}
                 required
               >
-                <option value="TRANSFERENCIA">Transferencia / Pago Móvil</option>
-                <option value="EFECTIVO">Efectivo Divisas</option>
-                <option value="ZELLE">Zelle</option>
-                <option value="PUNTO_DE_VENTA">Punto de Venta</option>
+                <option value="Zelle">Zelle</option>
+                <option value="Efectivo">Efectivo Divisas</option>
+                <option value="Binance">Binance</option>
+                <option value="Transferencia">Transferencia / Pago Móvil</option>
+                <option value="Panama">Cuenta Panamá</option>
               </select>
+            </div>
+
+            {/* Modalidad y Condición */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-slate-700 mb-2">Modalidad</label>
+                <div className="flex gap-2">
+                  <select 
+                    className="flex-1 h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors"
+                    value={modalidadPago}
+                    onChange={(e) => setModalidadPago(e.target.value)}
+                  >
+                    <option value="Contado">Contado</option>
+                    <option value="Crédito">Crédito</option>
+                  </select>
+                  {modalidadPago === 'Crédito' && (
+                    <div className="flex gap-2">
+                      <input 
+                        type="number" 
+                        placeholder="Inicial ($)" 
+                        className="w-24 h-14 bg-slate-50 border border-slate-200 rounded-xl px-2 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors text-center"
+                        value={inicialMonto || ''}
+                        onChange={(e) => setInicialMonto(Number(e.target.value))}
+                        min="0"
+                      />
+                      <input 
+                        type="number" 
+                        placeholder="Días" 
+                        className="w-20 h-14 bg-slate-50 border border-slate-200 rounded-xl px-2 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors text-center"
+                        value={diasCredito || ''}
+                        onChange={(e) => setDiasCredito(Number(e.target.value))}
+                        min="1"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-slate-700 mb-2">Condición</label>
+                <select 
+                  className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors"
+                  value={condicionEntrega}
+                  onChange={(e) => setCondicionEntrega(e.target.value)}
+                >
+                  <option value="Retiro">Retiro Cliente</option>
+                  <option value="Despacho">Despacho</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Dirección de Envío */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Dirección de Envío / Despacho</label>
+              <textarea 
+                className="w-full h-20 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none"
+                value={direccionEnvio}
+                onChange={(e) => setDireccionEnvio(e.target.value)}
+                placeholder="Dirección donde se entregará la mercancía..."
+              />
+            </div>
+
+            {/* Ajuste de Precio */}
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <label className="flex items-center gap-2 cursor-pointer mb-2">
+                <input 
+                  type="checkbox" 
+                  className="w-5 h-5 text-blue-600 rounded"
+                  checked={precioPersonalizado}
+                  onChange={(e) => {
+                    setPrecioPersonalizado(e.target.checked)
+                    if (e.target.checked) setTotalPersonalizado(totalUSD)
+                  }}
+                />
+                <span className="text-sm font-bold text-slate-700">Ajuste de Precio Final (USD)</span>
+              </label>
+              {precioPersonalizado && (
+                <input 
+                  type="number" 
+                  step="0.01"
+                  className="w-full h-12 bg-white border border-slate-300 rounded-lg px-4 font-medium text-slate-800 outline-none focus:border-blue-500 mt-2"
+                  value={totalPersonalizado}
+                  onChange={(e) => setTotalPersonalizado(Number(e.target.value))}
+                />
+              )}
             </div>
 
             {/* Subida de Comprobante (Touch First) */}

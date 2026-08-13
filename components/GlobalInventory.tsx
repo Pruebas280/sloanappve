@@ -52,6 +52,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
       const { data, error } = await supabase
         .from('productos')
         .select('*')
+        .eq('activo', true)
         .order('nombre', { ascending: true })
       if (error) throw error
       setProductos(data || [])
@@ -66,7 +67,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
     const fetchUserRole = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        const { data } = await supabase.from('usuarios').select('rol').eq('id', session.user.id).single()
+        const { data } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
         if (data) setUserRole(data.rol)
       }
     }
@@ -84,6 +85,58 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
     return productos.filter(p => p.nombre.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q)))
   }, [productos, searchQuery])
 
+  const esAdmin = userRole?.toLowerCase() === 'administracion' || 
+                  userRole?.toLowerCase() === 'administrador' || 
+                  userRole?.toLowerCase() === 'admin' || 
+                  userRole?.toLowerCase() === 'owner';
+
+  const exportarInventarioPDF = async () => {
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+      
+      const doc = new jsPDF('p', 'pt', 'a4')
+
+      doc.setFillColor(224, 242, 254)
+      doc.rect(0, 0, 600, 80, 'F')
+      doc.setFontSize(22)
+      doc.setTextColor(2, 132, 199)
+      doc.text('REPORTE DE INVENTARIO', 40, 45)
+      doc.setFontSize(10)
+      doc.setTextColor(100)
+      doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, 40, 65)
+
+      const tableColumn = ["Código / ID", "Nombre del Producto", "Precio USD", "Stock Actual", "Estado"]
+      const tableRows = filteredProductos.map(p => [
+        p.sku || p.id.split('-')[0],
+        p.nombre,
+        `$${Number(p.precio_usd || 0).toFixed(2)}`,
+        p.stock_disponible,
+        p.activo ? 'Activo' : 'Inactivo'
+      ])
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 100,
+        styles: { fontSize: 9, cellPadding: 5, lineColor: [224, 242, 254], lineWidth: 0.5 },
+        headStyles: { fillColor: [2, 132, 199], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [240, 249, 255] },
+        columnStyles: {
+          0: { cellWidth: 100 }, // ~35mm
+          // 1 is Auto
+          2: { cellWidth: 85, halign: 'right' }, // ~30mm
+          3: { cellWidth: 70, halign: 'center' }, // ~25mm
+          4: { cellWidth: 70, halign: 'center' }  // ~25mm
+        }
+      })
+
+      doc.save(`Inventario_${Date.now()}.pdf`)
+    } catch (error) {
+      alert("Error al generar PDF: " + (error as Error).message)
+    }
+  }
+
   // ==========================================
   // HELPER: SUBIR IMAGEN A STORAGE
   // ==========================================
@@ -100,9 +153,41 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
     return data.publicUrl
   }
 
-  // ==========================================
-  // HANDLERS CRUD
-  // ==========================================
+  async function handleCrearProducto(nuevoProducto: any) {
+    const { data, error } = await supabase.from('productos').insert([nuevoProducto]);
+    if (error) {
+      console.error("Error al crear producto:", error);
+      alert("Error al guardar producto: " + error.message);
+      return;
+    }
+    await fetchProductos();
+    alert('Producto creado exitosamente.');
+  }
+
+  async function handleEditarProducto(id: string, datosActualizados: any) {
+    const { data, error } = await supabase.from('productos').update(datosActualizados).eq('id', id);
+    if (error) {
+      console.error("Error al actualizar producto:", error);
+      alert("Error al actualizar: " + error.message);
+      return;
+    }
+    await fetchProductos();
+    alert('Producto actualizado exitosamente.');
+  }
+
+  async function handleBorrarProducto(id: string) {
+    if (!window.confirm("¿Estás seguro de eliminar este producto del inventario global?")) return;
+    
+    const { error } = await supabase.from('productos').delete().eq('id', id);
+    if (error) {
+      console.error("Error al eliminar producto:", error);
+      alert("No se pudo eliminar el producto: " + error.message);
+      return;
+    }
+    setProductos(prev => prev.filter(p => p.id !== id));
+    await fetchProductos();
+  }
+
   const handleSaveManual = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSavingManual(true)
@@ -125,35 +210,18 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
 
       if (editingProduct) {
         // Actualizar
-        const { error } = await supabase.from('productos').update(payload).eq('id', editingProduct.id)
-        if (error) throw error
-        alert('Producto actualizado exitosamente.')
+        await handleEditarProducto(editingProduct.id, payload)
       } else {
         // Crear
         const insertPayload = { ...payload, stock_reservado: 0, activo: true }
-        const { error } = await supabase.from('productos').insert([insertPayload])
-        if (error) throw error
-        alert('Producto creado exitosamente.')
+        await handleCrearProducto(insertPayload)
       }
 
       closeModal()
-      fetchProductos()
     } catch (err: any) {
       alert('Error guardando el producto: ' + err.message)
     } finally {
       setIsSavingManual(false)
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Seguro que deseas eliminar este producto? Esta acción no se puede deshacer.")) return
-    try {
-      const { error } = await supabase.from('productos').delete().eq('id', id)
-      if (error) throw error
-      alert('Producto eliminado exitosamente.')
-      fetchProductos()
-    } catch (err: any) {
-      alert('Error al eliminar producto: ' + err.message)
     }
   }
 
@@ -253,7 +321,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
           <div className="text-xl font-black tracking-wide">📦 Gestión de Inventario</div>
         )}
         
-        {userRole === 'owner' && (
+        {esAdmin && (
           <button 
             onClick={openCreateModal}
             className="bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 w-full md:w-auto"
@@ -277,6 +345,12 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <button 
+            onClick={exportarInventarioPDF}
+            className="hidden md:flex bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2.5 px-6 rounded-xl transition-colors items-center justify-center gap-2 border border-blue-200"
+          >
+            Exportar PDF
+          </button>
         </div>
 
         {isLoading ? (
@@ -329,12 +403,12 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                         <span className="font-black bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">CANT: {prod.stock_disponible}</span>
                       </div>
                       
-                      {userRole === 'owner' && (
+                      {esAdmin && (
                         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => openEditModal(prod)} className="text-sm font-bold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1 border border-transparent hover:border-blue-200">
                             ✏️ Editar
                           </button>
-                          <button onClick={() => handleDelete(prod.id)} className="text-sm font-bold text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 border border-transparent hover:border-red-200">
+                          <button onClick={() => handleBorrarProducto(prod.id)} className="text-sm font-bold text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 border border-transparent hover:border-red-200">
                             🗑️ Eliminar
                           </button>
                         </div>

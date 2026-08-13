@@ -9,7 +9,7 @@ import VendedorPOS from '@/components/VendedorPOS'
 import GlobalInventory from '@/components/GlobalInventory'
 import UserManagement from '@/components/UserManagement'
 import ClientsManager from '@/components/ClientsManager'
-import { Crown, BarChart, Globe, CreditCard, Truck, ShoppingCart, Users, Briefcase, FileText, Trash2, CheckCircle2, X, Menu, Search, Bell, HelpCircle } from 'lucide-react'
+import { Crown, BarChart, Globe, CreditCard, Truck, ShoppingCart, Users, Briefcase, FileText, Trash2, CheckCircle2, X, Menu, Search, Bell, HelpCircle, PackageCheck } from 'lucide-react'
 
 // ============================================================================
 // CONFIGURACIÓN DE SUPABASE Y TYPES
@@ -39,7 +39,7 @@ interface OrdenReporte {
   }[]
 }
 
-type OwnerTab = 'metricas' | 'inventario_global' | 'pagos' | 'logistica' | 'pos' | 'clientes' | 'personal'
+type OwnerTab = 'metricas' | 'inventario_global' | 'pagos' | 'logistica' | 'pos' | 'clientes' | 'personal' | 'cobranza'
 
 // ============================================================================
 // COMPONENTE PRINCIPAL
@@ -272,9 +272,11 @@ export default function OwnerDashboard({
             
             {(role === 'owner' || role === 'administracion') && <SidebarItem tab="pagos" icon={CreditCard} label="Aprobación Pagos" />}
             
+            {(role === 'owner' || role === 'administracion') && <SidebarItem tab="cobranza" icon={FileText} label="Cuentas por Cobrar" />}
+            
             {(role === 'owner' || role === 'almacenista') && <SidebarItem tab="logistica" icon={Truck} label="Logística Despacho" />}
             
-            {(role === 'owner' || role === 'vendedor') && <SidebarItem tab="pos" icon={ShoppingCart} label="Punto de Venta" />}
+            {(role === 'owner' || role === 'vendedor') && <SidebarItem tab="pos" icon={PackageCheck} label="Ordenes" />}
             
             {role === 'owner' && <SidebarItem tab="clientes" icon={Users} label="Clientes" />}
             
@@ -422,6 +424,7 @@ export default function OwnerDashboard({
           {/* RENDERING DINÁMICO DE MÓDULOS DEL RESTO DE LA APP */}
           {activeTab === 'inventario_global' && <div className="animate-in fade-in h-full"><GlobalInventory hideHeader={true} /></div>}
           {activeTab === 'pagos' && (role === 'owner' || role === 'administracion') && <div className="animate-in fade-in h-full -m-4 md:-m-6 lg:-m-8"><AdminDashboard hideTabs={true} /></div>}
+          {activeTab === 'cobranza' && (role === 'owner' || role === 'administracion') && <div className="animate-in fade-in h-full -m-4 md:-m-6 lg:-m-8"><AdminDashboard hideTabs={true} defaultTab="cobranza" /></div>}
           {activeTab === 'logistica' && (role === 'owner' || role === 'almacenista') && <div className="animate-in fade-in h-full -m-4 md:-m-6 lg:-m-8"><AlmacenDashboard /></div>}
           {activeTab === 'pos' && (role === 'owner' || role === 'vendedor') && <div className="animate-in fade-in h-full -m-4 md:-m-6 lg:-m-8"><VendedorPOS /></div>}
           {activeTab === 'personal' && role === 'owner' && <div className="animate-in fade-in h-full -m-4 md:-m-6 lg:-m-8"><UserManagement /></div>}

@@ -23,9 +23,9 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
       if (authError) throw new Error(`Credenciales incorrectas: ${authError.message}`)
       
-      // Consultar el rol en public.usuarios
+      // Consultar el rol en public.perfiles
       let { data: profileData, error: profileError } = await supabase
-        .from('usuarios')
+        .from('perfiles')
         .select('nombre, rol')
         .eq('id', authData.user.id)
         .single()
@@ -33,7 +33,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       // Si no existe (ej. usuario creado desde consola), lo creamos como owner por defecto
       if (profileError && profileError.code === 'PGRST116') {
         const { data: newProfile, error: insertError } = await supabase
-          .from('usuarios')
+          .from('perfiles')
           .insert({
             id: authData.user.id,
             email: authData.user.email || email,
