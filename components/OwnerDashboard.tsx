@@ -32,7 +32,7 @@ interface OrdenReporte {
   total_bs: number
   fecha_creacion: string
   clientes: { nombre: string } | null
-  usuarios: { nombre: string } | null
+  perfiles: { nombre: string } | null
   detalles_orden: {
     cantidad: number
     productos: { nombre: string } | null
@@ -128,7 +128,7 @@ export default function OwnerDashboard({
         .from('ordenes')
         .select(`
           id, estado, total_usd, total_bs, fecha_creacion,
-          clientes ( nombre ), usuarios ( nombre ),
+          clientes ( nombre ), perfiles ( nombre ),
           detalles_orden ( cantidad, productos ( nombre ) )
         `)
         .gte('fecha_creacion', `${startDate}T00:00:00.000Z`)
@@ -177,7 +177,7 @@ export default function OwnerDashboard({
         const fecha = new Date(orden.fecha_creacion).toLocaleDateString()
         const resumenProductos = orden.detalles_orden.map(item => `${item.cantidad}x ${item.productos?.nombre || 'N/A'}`).join('\n')
         return [
-          orden.id.split('-')[0], fecha, orden.clientes?.nombre || 'Desconocido', orden.usuarios?.nombre || 'Desconocido',
+          orden.id.split('-')[0], fecha, orden.clientes?.nombre || 'Desconocido', orden.perfiles?.nombre || 'Desconocido',
           resumenProductos, `$${orden.total_usd.toFixed(2)}`, `Bs. ${orden.total_bs.toFixed(2)}`, orden.estado.replace('_', ' ')
         ]
       })

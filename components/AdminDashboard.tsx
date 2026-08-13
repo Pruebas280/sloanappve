@@ -17,7 +17,7 @@ interface OrdenAdmin {
   creado_en: string
   fecha_creacion: string
   metodo_pago: string
-  comprobante_pago_url: string | null
+  // comprobante_pago_url removed
   modalidad_pago?: string
   dias_credito?: number
   inicial_monto?: number
@@ -622,14 +622,6 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
                       <FileText className="w-4 h-4" /> Descargar PDF
                     </button>
 
-                    {orden.comprobante_pago_url && (
-                      <button 
-                        onClick={() => setModalImage(orden.comprobante_pago_url!)}
-                        className="flex items-center justify-center gap-2 w-full py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition-all shadow-sm text-sm"
-                      >
-                        <FileText className="w-4 h-4" /> Ver Comprobante
-                      </button>
-                    )}
                     <div className="pt-2 flex justify-end border-t border-slate-100">
                       <button 
                         onClick={async () => {
@@ -837,28 +829,6 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
           </div>
         ) : null}
       </main>
-
-      {/* Modal Visor de Comprobante */}
-      {modalImage && (
-        <div className="fixed inset-0 backdrop-blur-sm bg-slate-900/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-2 rounded-xl max-w-2xl w-full flex flex-col relative shadow-sm border border-slate-200">
-            <button 
-              onClick={() => setModalImage(null)}
-              className="absolute -top-3 -right-3 w-8 h-8 bg-slate-900 text-white rounded-full flex items-center justify-center hover:bg-slate-800 transition-colors shadow-sm"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <div className="w-full h-[60vh] bg-slate-100/50 rounded-lg overflow-hidden flex items-center justify-center border border-slate-100">
-              {modalImage.endsWith('.pdf') ? (
-                 <iframe src={modalImage} className="w-full h-full" title="Comprobante PDF" />
-              ) : (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                 <img src={modalImage} alt="Comprobante" className="max-w-full max-h-full object-contain" />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal de Rechazo Admin */}
       {showRechazoModal && (

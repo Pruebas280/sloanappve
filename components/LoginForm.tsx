@@ -28,20 +28,21 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         .from('perfiles')
         .select('nombre, rol')
         .eq('id', authData.user.id)
-        .single()
+        .maybeSingle()
         
-      // Si no existe (ej. usuario creado desde consola), lo creamos como owner por defecto
-      if (profileError && profileError.code === 'PGRST116') {
+      // Si no existe en la base de datos (ej. usuario primerizo), lo creamos como owner por defecto
+      if (!profileData && !profileError) {
         const { data: newProfile, error: insertError } = await supabase
           .from('perfiles')
           .insert({
             id: authData.user.id,
-            email: authData.user.email || email,
+            correo: authData.user.email || email,
             nombre: authData.user.email?.split('@')[0] || 'Admin',
-            rol: 'owner'
+            rol: 'owner',
+            created_at: new Date().toISOString()
           })
           .select('nombre, rol')
-          .single()
+          .maybeSingle()
           
         if (insertError) throw new Error(`Error forzando perfil: ${insertError.message}`)
         profileData = newProfile
@@ -126,15 +127,13 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         <div className="hidden lg:flex flex-col justify-center items-center bg-gradient-to-br from-blue-600 to-indigo-700 p-8 relative">
           
           <div className="relative z-10 flex flex-col items-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img 
-              src="/login-banner.png" 
-              alt="Ilustración corporativa" 
-              className="max-w-xs w-full h-auto object-contain drop-shadow-2xl" 
-              onError={(e) => {
-                e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300' fill='none'%3E%3Crect width='400' height='300' rx='20' fill='%23ffffff' fill-opacity='0.1'/%3E%3Cpath d='M80 220L140 140L200 180L320 80' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='320' cy='80' r='12' fill='%23ffffff'/%3E%3Crect x='80' y='220' width='40' height='40' rx='8' fill='%23ffffff' fill-opacity='0.8'/%3E%3Crect x='180' y='180' width='40' height='80' rx='8' fill='%23ffffff' fill-opacity='0.5'/%3E%3C/svg%3E";
-              }}
-            />
+            {/* Reemplazo de login-banner.png con un diseño abstracto CSS */}
+            <div className="max-w-xs w-64 h-64 rounded-full bg-gradient-to-tr from-white/20 to-transparent flex items-center justify-center drop-shadow-2xl border border-white/10 backdrop-blur-md relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20"></div>
+              <svg className="w-24 h-24 text-white/80 z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+              </svg>
+            </div>
             <p className="text-white/90 text-xs font-medium text-center mt-6 tracking-wide">
               SISTEMA DE GESTIÓN Y CONTROL ERP
             </p>

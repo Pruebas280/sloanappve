@@ -71,7 +71,7 @@ export async function uploadInventoryAction(formData: FormData): Promise<UploadR
 
     // Validar Rol (según esquema previo)
     const { data: userData, error: userProfileError } = await supabase
-      .from('usuarios')
+      .from('perfiles')
       .select('rol')
       .eq('id', user.id)
       .single()

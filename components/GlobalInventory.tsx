@@ -67,7 +67,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
     const fetchUserRole = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        const { data } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
+        const { data } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle()
         if (data) setUserRole(data.rol)
       }
     }

@@ -20,7 +20,10 @@ interface UsuarioInfo {
   email: string
   nombre: string
   rol: string
-  fecha_creacion: string
+  fecha_creacion?: string
+  created_at?: string
+  nombre_completo?: string
+  correo?: string
 }
 
 export default function UserManagement() {
@@ -43,9 +46,16 @@ export default function UserManagement() {
   const [rol, setRol] = useState('vendedor')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  function formatearFecha(fechaString: string | null | undefined) {
+    if (!fechaString) return 'N/A';
+    const fecha = new Date(fechaString);
+    if (isNaN(fecha.getTime())) return 'N/A';
+    return fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
   const fetchUsuarios = async () => {
     setLoading(true)
-    const { data, error } = await supabase.from('perfiles').select('*').order('fecha_creacion', { ascending: false })
+    const { data, error } = await supabase.from('perfiles').select('*').order('created_at', { ascending: false })
     if (!error && data) {
       setUsuarios(data)
     }
@@ -144,10 +154,15 @@ export default function UserManagement() {
         // UPDATE (Solo public.usuarios)
         const { error: rpcError } = await supabase.rpc('cambiar_rol_usuario', { p_usuario_id: editingId, p_nuevo_rol: rol })
         if (rpcError) throw rpcError
-        const { error } = await supabase.from('perfiles').update({ nombre }).eq('id', editingId)
+        const { error } = await supabase.from('perfiles').update({ 
+          nombre: nombre,
+          correo: email,
+          rol: rol || 'administracion',
+          direccion: direccion || null
+        }).eq('id', editingId)
         if (error) throw error
-        alert('Rol actualizado correctamente')
-        setUsuarios(prev => prev.map(u => u.id === editingId ? { ...u, nombre, rol } : u))
+        alert('Perfil actualizado correctamente')
+        setUsuarios(prev => prev.map(u => u.id === editingId ? { ...u, nombre, rol, correo: email, direccion } : u))
       } else {
         // INSERT (Auth + public.usuarios)
         const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
@@ -163,13 +178,20 @@ export default function UserManagement() {
 
         const { error: insertError } = await supabase.from('perfiles').upsert({
           id: authData.user.id,
-          email,
-          nombre,
-          rol,
-          direccion
+          nombre: nombre,
+          correo: email,
+          rol: rol || 'administracion',
+          direccion: direccion || null,
+          created_at: new Date().toISOString()
         })
         
-        if (insertError) console.warn("Fallo inserción manual, tal vez el trigger ya lo hizo:", insertError)
+        if (insertError) {
+          if (insertError.code === '23505') {
+            console.warn("Perfil ya creado por trigger (duplicado), se actualizará en su lugar.");
+          } else {
+            console.warn("Fallo inserción manual, tal vez el trigger ya lo hizo:", insertError)
+          }
+        }
         alert('Usuario creado exitosamente.')
       }
 
@@ -210,20 +232,20 @@ export default function UserManagement() {
                 <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium animate-pulse text-sm">Cargando personal...</td></tr>
               ) : usuarios.map(user => (
                 <tr key={user.id} className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 text-slate-800 text-sm">
-                  <td className="py-3 px-4 font-semibold text-slate-900">{user.nombre}</td>
-                  <td className="py-3 px-4 text-slate-600">{user.email}</td>
+                  <td className="py-3 px-4 font-semibold text-slate-900">{user.nombre || user.nombre_completo || 'Sin Nombre'}</td>
+                  <td className="py-3 px-4 text-slate-600">{user.correo || user.email || 'Sin Correo'}</td>
                   <td className="py-3 px-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium border
-                      ${user.rol === 'owner' ? 'bg-slate-900 text-white border-slate-900' :
-                        user.rol === 'administracion' ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60' :
-                        user.rol === 'almacenista' ? 'bg-slate-100 text-slate-700 border-slate-200' :
+                      ${(user.rol || 'administracion') === 'owner' ? 'bg-slate-900 text-white border-slate-900' :
+                        (user.rol || 'administracion') === 'administracion' ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60' :
+                        (user.rol || 'administracion') === 'almacenista' ? 'bg-slate-100 text-slate-700 border-slate-200' :
                         'bg-blue-50 text-blue-700 border-blue-200/60'
                       }
                     `}>
-                      {user.rol}
+                      {user.rol || 'administracion'}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-slate-600">{new Date(user.fecha_creacion).toLocaleDateString()}</td>
+                  <td className="py-3 px-4 text-slate-600">{formatearFecha(user.created_at || user.fecha_creacion)}</td>
                   <td className="py-3 px-4 text-center">
                     <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2.5 py-1 rounded-full text-xs font-medium">Activo</span>
                   </td>

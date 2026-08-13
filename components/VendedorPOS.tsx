@@ -56,7 +56,7 @@ export default function VendedorPOS() {
   const [precioPersonalizado, setPrecioPersonalizado] = useState<boolean>(false)
   const [totalPersonalizado, setTotalPersonalizado] = useState<number>(0)
   const [showClientModal, setShowClientModal] = useState<boolean>(false)
-  const [comprobante, setComprobante] = useState<File | null>(null)
+  // comprobante state removed
   const [tasaCambio, setTasaCambio] = useState<number>(36.5)
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const [mensaje, setMensaje] = useState<{ tipo: 'exito' | 'error', texto: string } | null>(null)
@@ -121,19 +121,12 @@ export default function VendedorPOS() {
     })
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setComprobante(e.target.files[0])
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     
     // Validaciones
     if (cart.length === 0) return setMensaje({ tipo: 'error', texto: 'El carrito está vacío' })
     if (!selectedCliente) return setMensaje({ tipo: 'error', texto: 'Selecciona un cliente' })
-    if (!comprobante) return setMensaje({ tipo: 'error', texto: 'Debes adjuntar el comprobante de pago' })
 
     const totalVenta = precioPersonalizado ? (Number(totalPersonalizado) || 0) : (Number(totalUSD) || 0)
     if (modalidadPago === 'Crédito' && Number(inicialMonto) > totalVenta) {
@@ -147,19 +140,6 @@ export default function VendedorPOS() {
       // 1. Obtener usuario autenticado
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       if (authError || !user) throw new Error("No hay una sesión de vendedor activa.")
-
-      // 2. Subir imagen a Storage (Bucket 'comprobantes')
-      const fileExt = comprobante.name.split('.').pop()
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-      
-      const { error: uploadError } = await supabase.storage
-        .from('comprobantes')
-        .upload(fileName, comprobante, { cacheControl: '3600', upsert: false })
-
-      if (uploadError) throw new Error(`Fallo subiendo comprobante: ${uploadError.message}`)
-      
-      // Obtener URL Pública
-      const { data: { publicUrl } } = supabase.storage.from('comprobantes').getPublicUrl(fileName)
 
       // 3. Crear cabecera de la Orden
       const ordenPayload = {
@@ -175,7 +155,6 @@ export default function VendedorPOS() {
         precio_personalizado: precioPersonalizado ? (Number(totalPersonalizado) || null) : null,
         estado: 'aprobado',
         observaciones: 'Orden registrada desde Vendedor POS App',
-        comprobante_pago_url: publicUrl,
         total_bs: 0,
         tasa_cambio: 0
       }
@@ -215,7 +194,6 @@ export default function VendedorPOS() {
 
       // 6. Éxito y reseteo
       setCart([])
-      setComprobante(null)
       setSelectedCliente('')
       setMetodoPago('Zelle')
       setModalidadPago('Contado')
@@ -480,25 +458,6 @@ export default function VendedorPOS() {
                   onChange={(e) => setTotalPersonalizado(Number(e.target.value))}
                 />
               )}
-            </div>
-
-            {/* Subida de Comprobante (Touch First) */}
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Comprobante de Pago</label>
-              <div className="relative">
-                <input 
-                  type="file" 
-                  accept="image/*,application/pdf"
-                  onChange={handleFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  required
-                />
-                <div className={`w-full h-14 rounded-xl border-2 border-dashed flex items-center justify-center px-4 transition-colors ${comprobante ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-300 bg-slate-50 text-slate-500'}`}>
-                  <span className="font-medium truncate">
-                    {comprobante ? comprobante.name : 'Toca para adjuntar foto/archivo'}
-                  </span>
-                </div>
-              </div>
             </div>
 
             {/* Alertas */}
