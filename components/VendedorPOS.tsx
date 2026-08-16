@@ -231,11 +231,11 @@ export default function VendedorPOS() {
         
         {/* Encabezado Catálogo */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-blue-900 mb-4">Catálogo de Productos</h1>
+          <h1 className="text-2xl font-bold text-indigo-900 mb-4">Catálogo de Productos</h1>
           <input 
             type="search"
             placeholder="Buscar por nombre o SKU..."
-            className="w-full h-14 pl-4 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:ring-0 outline-none text-lg transition-colors"
+            className="w-full h-14 pl-4 rounded-xl border-2 border-slate-200 focus:border-indigo-500 focus:ring-0 outline-none text-lg transition-colors"
             value={searchQuery}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
           />
@@ -252,7 +252,7 @@ export default function VendedorPOS() {
                   <h3 className="text-lg font-bold leading-tight mt-1 mb-2 line-clamp-2">{prod.nombre}</h3>
                   <div className="flex justify-between items-end mb-4">
                     <div>
-                      <p className="text-xl font-black text-blue-600">${prod.precio_usd.toFixed(2)}</p>
+                      <p className="text-xl font-black text-indigo-600">${prod.precio_usd.toFixed(2)}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-lg text-xs font-bold ${prod.stock_disponible > 5 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                       Stock: {prod.stock_disponible}
@@ -274,7 +274,7 @@ export default function VendedorPOS() {
                   </span>
                   <button 
                     type="button"
-                    className="w-12 h-12 flex items-center justify-center rounded-lg bg-blue-600 shadow-sm text-white text-xl font-bold active:bg-blue-800 disabled:opacity-50"
+                    className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-600 shadow-sm text-white text-xl font-bold active:bg-indigo-800 disabled:opacity-50"
                     onClick={() => handleUpdateCart(prod, 1)}
                     disabled={prod.stock_disponible <= (cart.find(c => c.id === prod.id)?.cantidad_carrito || 0)}
                   >
@@ -290,8 +290,8 @@ export default function VendedorPOS() {
       {/* ---------------- DERECHA: CARRITO Y FORMULARIO DE ORDEN ---------------- */}
       <div className="w-full md:w-[400px] lg:w-[450px] bg-white border-l border-slate-200 shadow-2xl flex flex-col z-10 md:h-screen">
         
-        <div className="p-6 border-b border-slate-100 bg-blue-50">
-          <h2 className="text-xl font-black text-blue-900">Carrito de Orden</h2>
+        <div className="p-6 border-b border-slate-100 bg-indigo-50">
+          <h2 className="text-xl font-black text-indigo-900">Carrito de Orden</h2>
         </div>
 
         {/* Lista de Items */}
@@ -308,7 +308,7 @@ export default function VendedorPOS() {
                     <h4 className="font-bold text-sm leading-tight text-slate-700 line-clamp-1">{item.nombre}</h4>
                     <p className="text-xs text-slate-500 mt-1">{item.cantidad_carrito} un. x ${item.precio_usd}</p>
                   </div>
-                  <div className="font-black text-blue-700 whitespace-nowrap">
+                  <div className="font-black text-indigo-700 whitespace-nowrap">
                     ${(item.precio_usd * item.cantidad_carrito).toFixed(2)}
                   </div>
                 </div>
@@ -322,9 +322,9 @@ export default function VendedorPOS() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             
             {/* Totales */}
-            <div className="bg-blue-900 text-white p-4 rounded-2xl flex flex-col gap-1">
+            <div className="bg-indigo-900 text-white p-4 rounded-2xl flex flex-col gap-1">
               <div className="flex justify-between items-center">
-                <span className="text-blue-200 font-medium">Total USD:</span>
+                <span className="text-indigo-200 font-medium">Total USD:</span>
                 <span className="text-2xl font-black">${totalUSD.toFixed(2)}</span>
               </div>
             </div>
@@ -336,13 +336,13 @@ export default function VendedorPOS() {
                 <button 
                   type="button"
                   onClick={() => setShowClientModal(true)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition-colors"
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded transition-colors"
                 >
                   + Nuevo Cliente
                 </button>
               </div>
               <select 
-                className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-colors"
                 value={selectedCliente}
                 onChange={(e) => {
                   const val = e.target.value
@@ -363,7 +363,7 @@ export default function VendedorPOS() {
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Método de Pago</label>
               <select 
-                className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-colors"
                 value={metodoPago}
                 onChange={(e) => setMetodoPago(e.target.value)}
                 required
@@ -382,7 +382,7 @@ export default function VendedorPOS() {
                 <label className="block text-sm font-bold text-slate-700 mb-2">Modalidad</label>
                 <div className="flex gap-2">
                   <select 
-                    className="flex-1 h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors"
+                    className="flex-1 h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-indigo-500 transition-colors"
                     value={modalidadPago}
                     onChange={(e) => setModalidadPago(e.target.value)}
                   >
@@ -394,7 +394,7 @@ export default function VendedorPOS() {
                       <input 
                         type="number" 
                         placeholder="Inicial ($)" 
-                        className="w-24 h-14 bg-slate-50 border border-slate-200 rounded-xl px-2 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors text-center"
+                        className="w-24 h-14 bg-slate-50 border border-slate-200 rounded-xl px-2 font-medium text-slate-800 outline-none focus:border-indigo-500 transition-colors text-center"
                         value={inicialMonto || ''}
                         onChange={(e) => setInicialMonto(Number(e.target.value))}
                         min="0"
@@ -402,7 +402,7 @@ export default function VendedorPOS() {
                       <input 
                         type="number" 
                         placeholder="Días" 
-                        className="w-20 h-14 bg-slate-50 border border-slate-200 rounded-xl px-2 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors text-center"
+                        className="w-20 h-14 bg-slate-50 border border-slate-200 rounded-xl px-2 font-medium text-slate-800 outline-none focus:border-indigo-500 transition-colors text-center"
                         value={diasCredito || ''}
                         onChange={(e) => setDiasCredito(Number(e.target.value))}
                         min="1"
@@ -414,7 +414,7 @@ export default function VendedorPOS() {
               <div className="flex-1">
                 <label className="block text-sm font-bold text-slate-700 mb-2">Condición</label>
                 <select 
-                  className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-blue-500 transition-colors"
+                  className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 font-medium text-slate-800 outline-none focus:border-indigo-500 transition-colors"
                   value={condicionEntrega}
                   onChange={(e) => setCondicionEntrega(e.target.value)}
                 >
@@ -428,7 +428,7 @@ export default function VendedorPOS() {
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Dirección de Envío / Despacho</label>
               <textarea 
-                className="w-full h-20 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none"
+                className="w-full h-20 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-colors resize-none"
                 value={direccionEnvio}
                 onChange={(e) => setDireccionEnvio(e.target.value)}
                 placeholder="Dirección donde se entregará la mercancía..."
@@ -440,7 +440,7 @@ export default function VendedorPOS() {
               <label className="flex items-center gap-2 cursor-pointer mb-2">
                 <input 
                   type="checkbox" 
-                  className="w-5 h-5 text-blue-600 rounded"
+                  className="w-5 h-5 text-indigo-600 rounded"
                   checked={precioPersonalizado}
                   onChange={(e) => {
                     setPrecioPersonalizado(e.target.checked)
@@ -453,7 +453,7 @@ export default function VendedorPOS() {
                 <input 
                   type="number" 
                   step="0.01"
-                  className="w-full h-12 bg-white border border-slate-300 rounded-lg px-4 font-medium text-slate-800 outline-none focus:border-blue-500 mt-2"
+                  className="w-full h-12 bg-white border border-slate-300 rounded-lg px-4 font-medium text-slate-800 outline-none focus:border-indigo-500 mt-2"
                   value={totalPersonalizado}
                   onChange={(e) => setTotalPersonalizado(Number(e.target.value))}
                 />
@@ -471,7 +471,7 @@ export default function VendedorPOS() {
             <button 
               type="submit" 
               disabled={isSubmitting || cart.length === 0}
-              className="w-full h-16 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-lg font-black tracking-wide shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2"
+              className="w-full h-16 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-lg font-black tracking-wide shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2"
             >
               {isSubmitting ? 'Procesando Orden...' : 'Generar Orden'}
             </button>

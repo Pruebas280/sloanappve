@@ -229,7 +229,7 @@ export default function OwnerDashboard({
       <button 
         onClick={() => { setActiveTab(tab); setIsSidebarOpen(false); }}
         className={`w-full ${isActive 
-          ? 'bg-blue-600 text-white font-semibold rounded-xl shadow-md px-4 py-3 flex items-center gap-3 text-sm transition-all' 
+          ? 'bg-indigo-600 text-white font-semibold rounded-2xl shadow-md px-4 py-3 flex items-center gap-3 text-sm transition-all' 
           : 'text-slate-400 hover:bg-slate-900 hover:text-white rounded-xl px-4 py-3 flex items-center gap-3 text-sm font-medium transition-all'}`}
       >
         <Icon className="w-5 h-5" />
@@ -258,7 +258,7 @@ export default function OwnerDashboard({
         <div className="flex flex-col h-full">
           {/* Logo Corporativo */}
           <div className="text-white font-bold text-xl flex items-center gap-2 mb-8 px-2 py-4 border-b border-slate-800/80">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-md">
+            <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md">
               <Crown className="w-4 h-4 text-white" />
             </div>
             <span className="tracking-tight">ERP<span className="text-slate-500 font-medium">|Master</span></span>
@@ -320,7 +320,7 @@ export default function OwnerDashboard({
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex flex-col items-end">
                 <span className="text-xs font-bold text-slate-800 leading-tight">{userName}</span>
-                <span className="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 px-1.5 rounded-sm">{role}</span>
+                <span className="text-[10px] font-bold text-indigo-600 uppercase bg-indigo-50 px-1.5 rounded-md">{role}</span>
               </div>
               <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white shadow-sm border border-slate-700">
                 <Crown className="w-4 h-4" />
@@ -348,7 +348,7 @@ export default function OwnerDashboard({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 
                 <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
                     <BarChart className="w-5 h-5" />
                   </div>
                   <div>
@@ -408,7 +408,7 @@ export default function OwnerDashboard({
                     </select>
                   </div>
                   <div className="flex-none flex gap-2 w-full mt-2 sm:mt-0 sm:w-auto">
-                    <button onClick={handleDownloadPDF} disabled={isGenerating} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-all whitespace-nowrap text-sm disabled:opacity-50">
+                    <button onClick={handleDownloadPDF} disabled={isGenerating} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl shadow-sm transition-all whitespace-nowrap text-sm disabled:opacity-50">
                       {isGenerating ? 'Procesando...' : <><FileText className="w-4 h-4" /> Exportar PDF</>}
                     </button>
                     <button onClick={() => setShowLimpiarModal(true)} disabled={isGenerating} className="flex-none flex items-center justify-center gap-2 px-5 h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg shadow-sm transition-all whitespace-nowrap text-sm disabled:opacity-50" title="Vaciar historial">

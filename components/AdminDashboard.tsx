@@ -650,7 +650,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
                 onClick={() => {
                   alert('Exportación de inventario en construcción (simulada).')
                 }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 shadow-sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 shadow-sm"
               >
                 <FileText className="w-4 h-4" /> Exportar Inventario PDF
               </button>
@@ -658,7 +658,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
             
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-6 py-4 font-semibold">SKU</th>
                     <th className="px-6 py-4 font-semibold">Producto</th>
@@ -750,7 +750,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
                       </div>
 
                       <details className="mb-4 group">
-                        <summary className="text-xs font-bold text-blue-600 cursor-pointer hover:text-blue-700 select-none list-none flex items-center gap-1">
+                        <summary className="text-xs font-bold text-indigo-600 cursor-pointer hover:text-indigo-700 select-none list-none flex items-center gap-1">
                           <span className="transition group-open:rotate-90">▶</span> Ver desglose de productos
                         </summary>
                         <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">

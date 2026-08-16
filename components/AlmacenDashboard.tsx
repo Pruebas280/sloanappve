@@ -238,10 +238,10 @@ export default function AlmacenDashboard() {
       </header>
 
       <div className="flex border-b border-slate-200 bg-white">
-        <button onClick={() => setActiveTab('aprobados')} className={`flex-1 py-4 font-bold transition-colors ${activeTab === 'aprobados' ? 'text-blue-700 border-b-4 border-blue-700 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>
+        <button onClick={() => setActiveTab('aprobados')} className={`flex-1 py-4 font-bold transition-colors ${activeTab === 'aprobados' ? 'text-indigo-700 border-b-4 border-indigo-700 bg-indigo-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>
           Cola de Despacho (Por Preparar)
         </button>
-        <button onClick={() => setActiveTab('entregados')} className={`flex-1 py-4 font-bold transition-colors ${activeTab === 'entregados' ? 'text-blue-700 border-b-4 border-blue-700 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>
+        <button onClick={() => setActiveTab('entregados')} className={`flex-1 py-4 font-bold transition-colors ${activeTab === 'entregados' ? 'text-indigo-700 border-b-4 border-indigo-700 bg-indigo-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>
           Historial Entregados
         </button>
       </div>
@@ -264,7 +264,7 @@ export default function AlmacenDashboard() {
                 
                 <div className="p-5 flex-1">
                   <div className="flex justify-between items-start mb-4">
-                    {orden.estado === 'aprobado' && <span className="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1.5 rounded-full border border-blue-200 shadow-sm flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>Aprobado (Preparar)</span>}
+                    {orden.estado === 'aprobado' && <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-1.5 rounded-full border border-indigo-200 shadow-sm flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>Aprobado (Preparar)</span>}
                     {orden.estado === 'entregado' && <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1.5 rounded-full border border-green-200 shadow-sm flex items-center gap-1">✅ Entregado</span>}
                     
                     <span className="text-xs font-bold text-slate-400">{new Date(orden.creado_en).toLocaleString()}</span>
@@ -292,7 +292,7 @@ export default function AlmacenDashboard() {
                             <strong className="text-gray-900">{item.productos?.nombre || 'Producto sin nombre'}</strong>
                             {item.productos?.codigo ? ` (Cód: ${item.productos.codigo})` : ''}
                           </span>
-                          <span className="font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                          <span className="font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
                             Cant: {item.cantidad}
                           </span>
                         </li>

@@ -347,7 +347,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
           </div>
           <button 
             onClick={exportarInventarioPDF}
-            className="hidden md:flex bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2.5 px-6 rounded-xl transition-colors items-center justify-center gap-2 border border-blue-200"
+            className="hidden md:flex bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-2.5 px-6 rounded-xl transition-colors items-center justify-center gap-2 border border-indigo-200"
           >
             Exportar PDF
           </button>
@@ -392,7 +392,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                       <h3 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-4">{prod.nombre}</h3>
                       <div className="flex justify-between items-end mb-4">
                         <div>
-                          <p className="text-2xl font-black text-blue-700 leading-none">${prod.precio_usd.toFixed(2)}</p>
+                          <p className="text-2xl font-black text-indigo-700 leading-none">${prod.precio_usd.toFixed(2)}</p>
                           <p className="text-sm font-bold text-slate-400 mt-1">Bs. {prod.precio_bs.toFixed(2)}</p>
                         </div>
                       </div>
@@ -405,7 +405,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                       
                       {esAdmin && (
                         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => openEditModal(prod)} className="text-sm font-bold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1 border border-transparent hover:border-blue-200">
+                          <button onClick={() => openEditModal(prod)} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors flex items-center gap-1 border border-transparent hover:border-indigo-200">
                             ✏️ Editar
                           </button>
                           <button onClick={() => handleBorrarProducto(prod.id)} className="text-sm font-bold text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 border border-transparent hover:border-red-200">
@@ -444,13 +444,13 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
               <div className="flex border-b border-slate-200 bg-slate-50">
                 <button 
                   onClick={() => setModalTab('manual')} 
-                  className={`flex-1 py-4 font-bold text-sm ${modalTab === 'manual' ? 'text-blue-700 border-b-4 border-blue-700 bg-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                  className={`flex-1 py-4 font-bold text-sm ${modalTab === 'manual' ? 'text-indigo-700 border-b-4 border-indigo-700 bg-white' : 'text-slate-500 hover:bg-slate-100'}`}
                 >
                   Crear Manual
                 </button>
                 <button 
                   onClick={() => setModalTab('masivo')} 
-                  className={`flex-1 py-4 font-bold text-sm ${modalTab === 'masivo' ? 'text-blue-700 border-b-4 border-blue-700 bg-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                  className={`flex-1 py-4 font-bold text-sm ${modalTab === 'masivo' ? 'text-indigo-700 border-b-4 border-indigo-700 bg-white' : 'text-slate-500 hover:bg-slate-100'}`}
                 >
                   Cargar Excel / CSV
                 </button>
@@ -463,25 +463,25 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Código / SKU</label>
-                      <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-blue-500" placeholder="Autogenerado si vacío" value={manualForm.sku} onChange={e => setManualForm({...manualForm, sku: e.target.value})} />
+                      <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" placeholder="Autogenerado si vacío" value={manualForm.sku} onChange={e => setManualForm({...manualForm, sku: e.target.value})} />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Stock Disponible</label>
-                      <input required type="number" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-blue-500" value={manualForm.stock} onChange={e => setManualForm({...manualForm, stock: e.target.value})} />
+                      <input required type="number" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" value={manualForm.stock} onChange={e => setManualForm({...manualForm, stock: e.target.value})} />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nombre del Producto</label>
-                    <input required type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-blue-500" value={manualForm.nombre} onChange={e => setManualForm({...manualForm, nombre: e.target.value})} />
+                    <input required type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" value={manualForm.nombre} onChange={e => setManualForm({...manualForm, nombre: e.target.value})} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Precio $ USD</label>
-                      <input required type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-blue-500" value={manualForm.precio_usd} onChange={e => setManualForm({...manualForm, precio_usd: e.target.value})} />
+                      <input required type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" value={manualForm.precio_usd} onChange={e => setManualForm({...manualForm, precio_usd: e.target.value})} />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Precio Bs. (Opcional)</label>
-                      <input type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-blue-500" placeholder="Autocalculado" value={manualForm.precio_bs} onChange={e => setManualForm({...manualForm, precio_bs: e.target.value})} />
+                      <input type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" placeholder="Autocalculado" value={manualForm.precio_bs} onChange={e => setManualForm({...manualForm, precio_bs: e.target.value})} />
                     </div>
                   </div>
                   <div>
@@ -490,10 +490,10 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                       type="file" 
                       accept="image/*"
                       onChange={e => setSelectedImage(e.target.files?.[0] || null)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 outline-none focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 outline-none focus:border-indigo-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all" 
                     />
                     {editingProduct?.imagenes && !selectedImage && (
-                      <p className="text-xs font-bold text-blue-500 mt-2">Imagen actual preservada. Sube una nueva para reemplazarla.</p>
+                      <p className="text-xs font-bold text-indigo-500 mt-2">Imagen actual preservada. Sube una nueva para reemplazarla.</p>
                     )}
                   </div>
                   
@@ -505,9 +505,9 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
 
               {modalTab === 'masivo' && !editingProduct && (
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-2xl p-8 text-center relative hover:bg-blue-100 transition-colors cursor-pointer">
+                  <div className="border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-2xl p-8 text-center relative hover:bg-indigo-100 transition-colors cursor-pointer">
                     <input type="file" ref={fileInputRef} accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                    <svg className="w-12 h-12 text-blue-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <svg className="w-12 h-12 text-indigo-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
                     <p className="font-bold text-slate-700 text-lg">Haz clic o arrastra tu archivo Excel / CSV aquí</p>
                     <p className="text-slate-500 text-sm mt-2">Columnas esperadas: codigo, nombre, precio_usd, precio_bs, stock, imagen_url</p>
                   </div>
@@ -516,7 +516,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                     <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden">
                       <div className="bg-slate-100 px-4 py-2 font-bold text-sm text-slate-700 flex justify-between">
                         <span>Previsualización (Primeros 5 registros)</span>
-                        <span className="text-blue-600">{parsedData.length} productos detectados</span>
+                        <span className="text-indigo-600">{parsedData.length} productos detectados</span>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm whitespace-nowrap">
@@ -534,7 +534,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                                 <td className="p-3 text-slate-500 font-mono">{row.sku}</td>
                                 <td className="p-3 font-bold text-slate-800">{row.nombre}</td>
                                 <td className="p-3 text-slate-600">{row.stock_disponible}</td>
-                                <td className="p-3 text-blue-600 font-bold">${row.precio_usd}</td>
+                                <td className="p-3 text-indigo-600 font-bold">${row.precio_usd}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -546,7 +546,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                   <button 
                     onClick={handleProcessMassive} 
                     disabled={isProcessing || parsedData.length === 0} 
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl mt-4 shadow-lg transition-colors disabled:opacity-50"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl mt-4 shadow-lg transition-colors disabled:opacity-50"
                   >
                     {isProcessing ? 'Importando...' : `Procesar e Importar ${parsedData.length} Productos`}
                   </button>

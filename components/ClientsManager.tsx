@@ -211,21 +211,21 @@ export default function ClientsManager() {
               
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nombre Completo / Razón Social *</label>
-                <input type="text" required value={nombre || ""} onChange={e => setNombre(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
+                <input type="text" required value={nombre || ""} onChange={e => setNombre(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-sm text-slate-800" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cédula / RIF *</label>
-                  <input type="text" required value={cedula || ""} onChange={e => setCedula(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" disabled={isEditing} title={isEditing ? "La cédula no se puede modificar" : ""} />
+                  <input type="text" required value={cedula || ""} onChange={e => setCedula(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-sm text-slate-800" disabled={isEditing} title={isEditing ? "La cédula no se puede modificar" : ""} />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Teléfono</label>
-                  <input type="text" value={telefono || ""} onChange={e => setTelefono(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
+                  <input type="text" value={telefono || ""} onChange={e => setTelefono(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-sm text-slate-800" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Correo Electrónico (Opcional)</label>
-                <input type="email" value={email || ""} onChange={e => setEmail(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
+                <input type="email" value={email || ""} onChange={e => setEmail(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-sm text-slate-800" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Dirección</label>
@@ -234,7 +234,7 @@ export default function ClientsManager() {
                   placeholder="Ej. Av. Principal, Edif. Centro, Piso 2"
                   value={direccion || ''}
                   onChange={(e) => setDireccion(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-900 text-sm text-slate-800"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm text-slate-800"
                 />
               </div>
 

@@ -239,7 +239,7 @@ export default function UserManagement() {
                       ${(user.rol || 'administracion') === 'owner' ? 'bg-slate-900 text-white border-slate-900' :
                         (user.rol || 'administracion') === 'administracion' ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60' :
                         (user.rol || 'administracion') === 'almacenista' ? 'bg-slate-100 text-slate-700 border-slate-200' :
-                        'bg-blue-50 text-blue-700 border-blue-200/60'
+                        'bg-indigo-50 text-indigo-700 border-indigo-200/60'
                       }
                     `}>
                       {user.rol || 'administracion'}
