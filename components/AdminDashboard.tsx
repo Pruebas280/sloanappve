@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { CheckCircle2, XCircle, FileText, X, Clock, Trash2 } from 'lucide-react'
+import { CheckCircle2, XCircle, FileText, X, Clock, Trash2, ChevronDown } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 
 // ============================================================================
@@ -27,11 +27,12 @@ interface OrdenAdmin {
   fecha_actualizacion?: string
   clientes: { nombre: string; cedula_rif: string; direccion?: string; telefono?: string } | null
   usuarios: { nombre: string } | null // Vendedor
-  detalles_orden: {
+  orden_items: {
     cantidad: number
     producto_id: string
     precio_unitario_usd: number
-    productos: { nombre: string; sku?: string } | null
+    precio_unitario_bs: number
+    productos: { nombre: string; sku?: string; imagenes?: string[] } | null
   }[]
 }
 
@@ -55,6 +56,12 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'ordenes' | 'auditoria' | 'cobranza' | 'historial_pagos'>((defaultTab as 'ordenes' | 'auditoria' | 'cobranza' | 'historial_pagos') || 'ordenes')
+  const [ordenSubTab, setOrdenSubTab] = useState<'pendientes' | 'completadas'>('pendientes')
+  const [expandedOrders, setExpandedOrders] = useState<string[]>([])
+
+  const toggleOrderDetails = (orderId: string) => {
+    setExpandedOrders(prev => prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId])
+  }
 
   // Rechazo Modal
   const [showRechazoModal, setShowRechazoModal] = useState(false)
@@ -94,7 +101,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
     try {
       const { data, error } = await supabase
         .from('ordenes')
-        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), detalles_orden ( *, productos ( nombre, sku ) )')
+        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), orden_items ( *, productos ( nombre, sku ) )')
         .eq('modalidad_pago', 'Crédito')
         .in('estado', ['pendiente', 'aprobado', 'entregado', 'pendiente_pago', 'esperando_aprobacion'])
         .order('fecha_creacion', { ascending: false })
@@ -109,7 +116,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
     try {
       const { data, error } = await supabase
         .from('ordenes')
-        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), detalles_orden ( *, productos ( nombre, sku ) )')
+        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), orden_items ( *, productos ( nombre, sku ) )')
         .eq('estado', 'pagado')
         .order('fecha_creacion', { ascending: false })
       if (error) throw error
@@ -128,7 +135,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
           *,
           clientes ( nombre, cedula_rif, direccion ),
           usuarios!vendedor_id ( nombre ),
-          detalles_orden ( *, productos ( nombre, sku ) )
+          orden_items ( *, productos ( nombre, sku, imagenes ) )
         `)
         .neq('estado', 'cancelado')
         .order('fecha_creacion', { ascending: false })
@@ -164,6 +171,52 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       supabase.removeChannel(channel)
     }
   }, [fetchOrdenesPendientes, fetchCuentasCobrar, fetchPagosProcesados, supabase])
+
+  const generarReporteCompletadasPDF = async (ordenesCompletadas: OrdenAdmin[]) => {
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+      const doc = new jsPDF('p', 'pt', 'a4')
+
+      doc.setFontSize(18)
+      doc.setTextColor(15, 23, 42)
+      doc.text('Reporte de Órdenes Completadas', 40, 50)
+      
+      doc.setFontSize(10)
+      doc.setTextColor(100)
+      doc.text(`Fecha de emisión: ${new Date().toLocaleString()}`, 40, 65)
+      doc.text(`Total Órdenes: ${ordenesCompletadas.length}`, 40, 80)
+
+      const tableData = ordenesCompletadas.map(o => [
+        o.id.split('-')[0].toUpperCase(),
+        new Date(o.fecha_creacion || o.creado_en || Date.now()).toLocaleDateString(),
+        o.clientes?.nombre || 'N/A',
+        o.usuarios?.nombre || 'N/A',
+        o.estado.toUpperCase().replace('_', ' '),
+        `$${Number(o.total_usd).toFixed(2)}`
+      ])
+
+      autoTable(doc, {
+        startY: 100,
+        head: [['Orden', 'Fecha', 'Cliente', 'Vendedor', 'Estado', 'Total USD']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+      })
+
+      const totalGeneral = ordenesCompletadas.reduce((sum, o) => sum + Number(o.total_usd), 0)
+      
+      const finalY = (doc as any).lastAutoTable.finalY || 100
+      doc.setFontSize(12)
+      doc.setTextColor(0)
+      doc.text(`Total General USD: $${totalGeneral.toFixed(2)}`, 40, finalY + 30)
+
+      doc.save(`Reporte_Completadas_${new Date().getTime()}.pdf`)
+    } catch (err: any) {
+      console.error("Error generando reporte:", err)
+      alert("Error generando PDF: " + err.message)
+    }
+  }
 
   // ============================================================================
   // MANEJADORES DE ESTADO DE ÓRDENES
@@ -271,8 +324,8 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       // Si la orden estaba rechazada/cancelada, el stock se habia reintegrado al almacen.
       // Al devolverla a pendiente, hay que RESTAR el stock nuevamente.
       if (['rechazado', 'rechazado_en_entrega', 'cancelado'].includes(oldEstado)) {
-        if (ordenObj.detalles_orden) {
-          for (const item of ordenObj.detalles_orden) {
+        if (ordenObj.orden_items) {
+          for (const item of ordenObj.orden_items) {
             const { data: prodData } = await supabase.from('productos').select('stock_disponible').eq('id', (item as any).producto_id).single()
             if (prodData) {
               await supabase.from('productos').update({
@@ -434,7 +487,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
 
       // 3. Tabla de Productos
       const tableColumn = ["Cant.", "Código/SKU", "Descripción", "P.U USD", "Total USD"]
-      const tableRows = (orden.detalles_orden || []).map(item => [
+      const tableRows = (orden.orden_items || []).map(item => [
         item.cantidad,
         item.productos?.sku || 'N/A',
         item.productos?.nombre || 'Producto',
@@ -496,12 +549,18 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
         }
       })
 
-      // 5. Línea de firma y Pie de página final
+      // 5. Bloque de Firmas y Pie de página final
       doc.setDrawColor(186, 230, 253) // Azul pastel suave
+      
+      // Firma 1 (Cliente)
       doc.line(40, finalY + 70, 240, finalY + 70)
       doc.setTextColor(100)
       doc.setFontSize(10)
-      doc.text('Firma de Conformidad / Signature', 40, finalY + 85)
+      doc.text('Recibido Conforme (Cliente)', 40, finalY + 85)
+      
+      // Firma 2 (Almacén)
+      doc.line(320, finalY + 70, 520, finalY + 70)
+      doc.text('Entregado Por (Almacén)', 320, finalY + 85)
 
       const pageHeight = doc.internal.pageSize.getHeight()
       const footerY = pageHeight - 50
@@ -513,7 +572,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       doc.text('Sistema ERP Master | Documento generado automáticamente.', 40, footerY + 25)
       doc.text(`Impreso: ${new Date().toLocaleString()}`, 400, footerY + 25)
 
-      doc.save(`Orden_${orden.id.split('-')[0]}.pdf`)
+      doc.save(`Nota_de_Entrega_Orden_${orden.id.slice(0, 8)}.pdf`)
     } catch (err: any) {
       alert("Error generando PDF: " + err.message)
     }
@@ -566,7 +625,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
         
         <div className="space-y-6 max-w-7xl mx-auto">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-slate-700">Monitoreo Global de Órdenes ({ordenes.length})</h2>
+            <h2 className="text-xl font-bold text-slate-700">Monitoreo de Órdenes ({ordenes.length})</h2>
             <button 
               onClick={handleVaciarHistorialPagos}
               className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded shadow mb-4"
@@ -574,73 +633,174 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
               🗑️ Vaciar Historial de Pagos
             </button>
           </div>
-          
-          {isLoading && ordenes.length === 0 ? (
-            <p className="text-slate-500 font-medium animate-pulse text-sm">Cargando órdenes en espera...</p>
-          ) : ordenes.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200/80 p-12 text-center text-slate-500 font-medium shadow-sm text-sm">
-              No hay pagos pendientes de revisión actualmente.
+
+          {/* Sub-Tabs: Pendientes vs Completadas */}
+          <div className="flex justify-between items-end border-b border-slate-200 mb-6">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setOrdenSubTab('pendientes')}
+                className={`py-3 px-4 font-semibold text-sm transition-all border-b-2 ${ordenSubTab === 'pendientes' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                Órdenes Pendientes
+              </button>
+              <button
+                onClick={() => setOrdenSubTab('completadas')}
+                className={`py-3 px-4 font-semibold text-sm transition-all border-b-2 ${ordenSubTab === 'completadas' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                Órdenes Completadas
+              </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {ordenes.map(orden => (
-                <div key={orden.id} className="bg-white rounded-xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
-                  <div className="p-6 flex-1">
-                    <div className="flex justify-between items-start mb-4">
-                      <span className="flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200/60 px-2.5 py-1 rounded-full text-xs font-medium">
-                        <Clock className="w-3.5 h-3.5" /> PENDIENTE REVISIÓN
-                      </span>
-                      <span className="text-xs font-medium text-slate-400">{new Date(orden.fecha_creacion || orden.creado_en || Date.now()).toLocaleString()}</span>
+
+            {ordenSubTab === 'completadas' && (
+              <button 
+                onClick={() => generarReporteCompletadasPDF(ordenes.filter(o => ['completada', 'despachada', 'entregada', 'entregado'].includes(o.estado?.toLowerCase() || '')))}
+                className="mb-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+              >
+                <FileText className="w-4 h-4" /> Exportar Reporte PDF
+              </button>
+            )}
+          </div>
+          
+          {(() => {
+            const listToShow = ordenSubTab === 'pendientes' 
+              ? ordenes.filter(o => !['completada', 'despachada', 'entregada', 'entregado'].includes(o.estado?.toLowerCase() || ''))
+              : ordenes.filter(o => ['completada', 'despachada', 'entregada', 'entregado'].includes(o.estado?.toLowerCase() || ''));
+
+            if (isLoading && ordenes.length === 0) {
+              return <p className="text-slate-500 font-medium animate-pulse text-sm">Cargando órdenes...</p>
+            }
+
+            if (listToShow.length === 0) {
+              return (
+                <div className="bg-white rounded-xl border border-slate-200/80 p-12 text-center text-slate-500 font-medium shadow-sm text-sm">
+                  No hay órdenes en esta categoría.
+                </div>
+              )
+            }
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {listToShow.map(orden => (
+                  <div key={orden.id} className="bg-white rounded-xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+                    <div className="p-6 flex-1">
+                      <div className="flex justify-between items-start mb-4">
+                        <span className={`flex items-center gap-1.5 border px-2.5 py-1 rounded-full text-xs font-medium ${ordenSubTab === 'completadas' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200/60'}`}>
+                          {ordenSubTab === 'completadas' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />} 
+                          {orden.estado.toUpperCase().replace('_', ' ')}
+                        </span>
+                        <span className="text-xs font-medium text-slate-400">{new Date(orden.fecha_creacion || orden.creado_en || Date.now()).toLocaleString()}</span>
+                      </div>
+                      <h3 className="font-semibold text-lg text-slate-900 mb-1 tracking-tight">Orden #{orden.id.split('-')[0]}</h3>
+                      <p className="text-sm text-slate-600 font-medium">Cliente: <span className="font-semibold text-slate-800">{orden.clientes?.nombre}</span></p>
+                      <p className="text-sm text-slate-600 font-medium mb-4">Vendedor: {orden.usuarios?.nombre}</p>
+                      
+                      {/* Acordeón de Detalles de Productos */}
+                      <button 
+                        onClick={() => toggleOrderDetails(orden.id)}
+                        className="w-full flex items-center justify-between text-left text-sm font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 transition-colors px-4 py-2.5 rounded-lg border border-indigo-100"
+                      >
+                        Ver Detalles de Productos
+                        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expandedOrders.includes(orden.id) ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {expandedOrders.includes(orden.id) && (
+                        <div className="mt-3 bg-slate-50 border border-slate-100 rounded-lg overflow-hidden animate-in slide-in-from-top-2 fade-in">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-100/80 text-slate-600 uppercase">
+                              <tr>
+                                <th className="px-3 py-2 font-bold w-10">Img</th>
+                                <th className="px-3 py-2 font-bold">Producto</th>
+                                <th className="px-3 py-2 font-bold text-center">Cant.</th>
+                                <th className="px-3 py-2 font-bold text-right">Precio</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700">
+                              {orden.orden_items?.map((detalle, idx) => (
+                                <tr key={idx} className="hover:bg-slate-100/50 transition-colors">
+                                  <td className="px-3 py-2">
+                                    {detalle.productos?.imagenes?.[0] ? (
+                                      <img src={detalle.productos.imagenes[0]} alt="prod" className="w-8 h-8 rounded-md object-cover border border-slate-200" />
+                                    ) : (
+                                      <div className="w-8 h-8 bg-slate-200 rounded-md flex items-center justify-center text-[8px] text-slate-400 font-bold border border-slate-300">N/A</div>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <p className="font-semibold">{detalle.productos?.nombre || 'Producto Desconocido'}</p>
+                                    <p className="text-[10px] text-slate-400">SKU: {detalle.productos?.sku || 'N/A'}</p>
+                                  </td>
+                                  <td className="px-3 py-2 text-center font-semibold">x{detalle.cantidad}</td>
+                                  <td className="px-3 py-2 text-right">
+                                    <p className="font-bold text-emerald-600">${Number(detalle.precio_unitario_usd || 0).toFixed(2)}</p>
+                                    <p className="text-[10px] text-slate-500">Bs. {Number(detalle.precio_unitario_bs || 0).toFixed(2)}</p>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      
+                      <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center bg-slate-50/50 -mx-6 -mb-6 px-6 py-4">
+                        <div>
+                          <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase tracking-wider border border-slate-200">
+                            {orden.metodo_pago}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-0.5">Total USD</p>
+                          <p className="font-bold text-xl text-emerald-600 leading-none">${Number(orden.total_usd).toFixed(2)}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Bs. {Number(orden.total_bs).toFixed(2)}</p>
+                        </div>
+                      </div>
                     </div>
-                    <h3 className="font-semibold text-lg text-slate-900 mb-1 tracking-tight">Orden #{orden.id.split('-')[0]}</h3>
-                    <p className="text-sm text-slate-600 font-medium">Cliente: <span className="font-semibold text-slate-800">{orden.clientes?.nombre}</span></p>
-                    <p className="text-sm text-slate-600 font-medium">Vendedor: {orden.usuarios?.nombre}</p>
                     
-                    {/* Lista de Productos */}
-                    <div className="mt-4 bg-slate-50/80 rounded-lg p-3 border border-slate-100">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Productos ({orden.detalles_orden?.length || 0})</p>
-                      <ul className="text-sm font-medium text-slate-700 space-y-1">
-                        {orden.detalles_orden?.map((item, idx) => (
-                          <li key={idx}>- {item.cantidad}x {item.productos?.nombre || 'Producto'}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-end">
-                      <span className="text-slate-600 text-sm font-medium">Total a Validar:</span>
-                      <div className="text-right">
-                        <p className="text-xl font-semibold text-slate-900 tracking-tight">${Number(orden.total_usd).toFixed(2)}</p>
+                    {/* Action Buttons y Utilidades */}
+                    <div className="p-5 bg-slate-50 flex flex-col gap-3 border-t border-slate-200">
+                      
+                      {ordenSubTab === 'pendientes' && (
+                        <div className="flex gap-2 mb-2">
+                          <button 
+                            onClick={() => { setOrdenRechazoId(orden.id); setShowRechazoModal(true); }}
+                            className="flex-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-bold py-2.5 px-4 rounded-lg shadow-sm transition-colors text-sm flex items-center justify-center gap-1.5"
+                          >
+                            <XCircle className="w-4 h-4" /> Rechazar
+                          </button>
+                          <button 
+                            onClick={() => cambiarEstadoOrden(orden, 'aprobado')}
+                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-sm transition-colors text-sm flex items-center justify-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Aprobar
+                          </button>
+                        </div>
+                      )}
+
+                      <button 
+                        onClick={() => generarPDF(orden)}
+                        className="flex items-center justify-center gap-2 w-full py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-all shadow-sm text-sm"
+                      >
+                        <FileText className="w-4 h-4" /> Descargar PDF
+                      </button>
+
+                      <div className="pt-2 flex justify-end border-t border-slate-200/60">
+                        <button 
+                          onClick={async () => {
+                            if (confirm('¿Borrar orden de la vista?')) {
+                              await supabase.from('ordenes').delete().eq('id', orden.id);
+                              if (typeof fetchOrdenesPendientes === 'function') fetchOrdenesPendientes();
+                            }
+                          }}
+                          className="text-slate-400 hover:text-red-500 transition p-1"
+                          title="Borrar permanentemente"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="p-5 bg-slate-50/80 flex flex-col gap-3 border-t border-slate-100">
-                    <button 
-                      onClick={() => generarPDF(orden)}
-                      className="flex items-center justify-center gap-2 w-full py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-all shadow-sm text-sm"
-                    >
-                      <FileText className="w-4 h-4" /> Descargar PDF
-                    </button>
-
-                    <div className="pt-2 flex justify-end border-t border-slate-100">
-                      <button 
-                        onClick={async () => {
-                          if (confirm('¿Borrar orden de la vista?')) {
-                            await supabase.from('ordenes').delete().eq('id', orden.id);
-                            fetchOrdenesPendientes();
-                          }
-                        }}
-                        className="text-slate-400 hover:text-red-500 transition p-1"
-                        title="Borrar de la vista"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
               ))}
             </div>
-          )}
+            )
+          })()}
         </div>
         ) : activeTab === 'auditoria' ? (
           <div className="max-w-7xl mx-auto space-y-6">
@@ -754,7 +914,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
                           <span className="transition group-open:rotate-90">▶</span> Ver desglose de productos
                         </summary>
                         <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
-                          {(orden.detalles_orden && orden.detalles_orden.length > 0) ? orden.detalles_orden.map((detalle, idx) => (
+                          {(orden.orden_items && orden.orden_items.length > 0) ? orden.orden_items.map((detalle, idx) => (
                             <div key={idx} className="flex justify-between items-center text-xs text-slate-600 bg-slate-50 p-1.5 rounded">
                               <div className="flex gap-2">
                                 <span className="font-bold">{detalle.cantidad}x</span>

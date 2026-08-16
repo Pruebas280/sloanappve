@@ -9,7 +9,7 @@ import VendedorPOS from '@/components/VendedorPOS'
 import GlobalInventory from '@/components/GlobalInventory'
 import UserManagement from '@/components/UserManagement'
 import ClientsManager from '@/components/ClientsManager'
-import { Crown, BarChart, Globe, CreditCard, Truck, ShoppingCart, Users, Briefcase, FileText, Trash2, CheckCircle2, X, Menu, Search, Bell, HelpCircle, PackageCheck } from 'lucide-react'
+import { Crown, BarChart, Globe, CreditCard, Truck, ShoppingCart, Users, Briefcase, FileText, Trash2, CheckCircle2, X, Menu, Search, Bell, HelpCircle, PackageCheck, ClipboardCheck } from 'lucide-react'
 
 // ============================================================================
 // CONFIGURACIÓN DE SUPABASE Y TYPES
@@ -31,9 +31,9 @@ interface OrdenReporte {
   total_usd: number
   total_bs: number
   fecha_creacion: string
-  clientes: { nombre: string } | null
-  perfiles: { nombre: string } | null
-  detalles_orden: {
+  cliente: { nombre: string } | null
+  vendedor: { nombre: string } | null
+  orden_items: {
     cantidad: number
     productos: { nombre: string } | null
   }[]
@@ -128,8 +128,9 @@ export default function OwnerDashboard({
         .from('ordenes')
         .select(`
           id, estado, total_usd, total_bs, fecha_creacion,
-          clientes ( nombre ), perfiles ( nombre ),
-          detalles_orden ( cantidad, productos ( nombre ) )
+          cliente:clientes!fk_ordenes_cliente ( nombre ),
+          vendedor:perfiles!fk_ordenes_vendedor ( nombre ),
+          orden_items ( cantidad, productos ( nombre ) )
         `)
         .gte('fecha_creacion', `${startDate}T00:00:00.000Z`)
         .lte('fecha_creacion', `${endDate}T23:59:59.999Z`)
@@ -175,9 +176,9 @@ export default function OwnerDashboard({
         totalBS += Number(orden.total_bs);
         
         const fecha = new Date(orden.fecha_creacion).toLocaleDateString()
-        const resumenProductos = orden.detalles_orden.map(item => `${item.cantidad}x ${item.productos?.nombre || 'N/A'}`).join('\n')
+        const resumenProductos = orden.orden_items.map(item => `${item.cantidad}x ${item.productos?.nombre || 'N/A'}`).join('\n')
         return [
-          orden.id.split('-')[0], fecha, orden.clientes?.nombre || 'Desconocido', orden.perfiles?.nombre || 'Desconocido',
+          orden.id.split('-')[0], fecha, orden.cliente?.nombre || 'Desconocido', orden.vendedor?.nombre || 'Desconocido',
           resumenProductos, `$${orden.total_usd.toFixed(2)}`, `Bs. ${orden.total_bs.toFixed(2)}`, orden.estado.replace('_', ' ')
         ]
       })
@@ -270,7 +271,7 @@ export default function OwnerDashboard({
             
             <SidebarItem tab="inventario_global" icon={Globe} label="Inventario Global" />
             
-            {(role === 'owner' || role === 'administracion') && <SidebarItem tab="pagos" icon={CreditCard} label="Aprobación Pagos" />}
+            {(role === 'owner' || role === 'administracion') && <SidebarItem tab="pagos" icon={ClipboardCheck} label="Monitoreo de Órdenes" />}
             
             {(role === 'owner' || role === 'administracion') && <SidebarItem tab="cobranza" icon={FileText} label="Cuentas por Cobrar" />}
             
