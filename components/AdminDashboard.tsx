@@ -439,9 +439,9 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       doc.rect(0, 0, 600, 100, 'F')
 
       // 1. Cabecera Corporativa
-      doc.setFontSize(22)
+      doc.setFontSize(20)
       doc.setTextColor(2, 132, 199) // Azul Rey brillante
-      doc.text('NOTA DE ENTREGA / DELIVERY NOTE', 40, 50)
+      doc.text('NOTA DE ENTREGA', 40, 50)
       
       doc.setFontSize(10)
       doc.setTextColor(100)
@@ -520,18 +520,17 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       doc.setTextColor(100)
       
       // Términos en margen izquierdo (X=40 -> ~14mm)
-      doc.text('Términos: Los pagos deben confirmarse antes del despacho.', 40, finalY + 30, { maxWidth: 200 })
+      doc.text('Términos: Los pagos deben confirmarse antes del despacho.', 40, finalY + 45, { maxWidth: 200 })
       
       const totalsRows = [
         ['Base Imponible:', `$${baseImponible.toFixed(2)}`],
         ['IVA (16%):', `$${iva.toFixed(2)}`],
-        ['Flete:', '$0.00'],
         ['TOTAL GENERAL:', `$${totalUSD.toFixed(2)}`]
       ]
 
       autoTable(doc, {
         body: totalsRows,
-        startY: finalY + 15,
+        startY: finalY + 30,
         margin: { left: 325 }, // ~115mm
         theme: 'plain',
         styles: { fontSize: 11, cellPadding: 6, textColor: [0, 0, 0] },
@@ -540,7 +539,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
           1: { halign: 'right' }
         },
         didParseCell: function(data: any) {
-          if (data.row.index === 3) {
+          if (data.row.index === 2) {
             data.cell.styles.fillColor = [224, 242, 254] // #E0F2FE
             data.cell.styles.textColor = [2, 132, 199]   // #0284C7
             data.cell.styles.fontStyle = 'bold'
@@ -553,14 +552,14 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       doc.setDrawColor(186, 230, 253) // Azul pastel suave
       
       // Firma 1 (Cliente)
-      doc.line(40, finalY + 70, 240, finalY + 70)
+      doc.line(40, finalY + 120, 240, finalY + 120)
       doc.setTextColor(100)
       doc.setFontSize(10)
-      doc.text('Recibido Conforme (Cliente)', 40, finalY + 85)
+      doc.text('Recibido Conforme (Cliente)', 40, finalY + 135)
       
       // Firma 2 (Almacén)
-      doc.line(320, finalY + 70, 520, finalY + 70)
-      doc.text('Entregado Por (Almacén)', 320, finalY + 85)
+      doc.line(320, finalY + 120, 520, finalY + 120)
+      doc.text('Entregado Por (Almacén)', 320, finalY + 135)
 
       const pageHeight = doc.internal.pageSize.getHeight()
       const footerY = pageHeight - 50

@@ -55,7 +55,7 @@ export default function UserManagement() {
 
   const fetchUsuarios = async () => {
     setLoading(true)
-    const { data, error } = await supabase.from('perfiles').select('*').order('created_at', { ascending: false })
+    const { data, error } = await supabase.from('usuarios').select('*').order('created_at', { ascending: false })
     if (!error && data) {
       setUsuarios(data)
     }
@@ -83,10 +83,10 @@ export default function UserManagement() {
   const openEditModal = (user: UsuarioInfo) => {
     setIsEditing(true)
     setEditingId(user.id)
-    setNombre(user.nombre)
-    setRol(user.rol)
+    setNombre(user.nombre || '')
+    setRol(user.rol || 'vendedor')
     // Se bloquean campos no editables (Auth credentials) en este modal básico
-    setEmail(user.email) 
+    setEmail(user.email || (user as any).correo || '') 
     setPassword('')
     setErrorMsg(null)
     setShowModal(true)
@@ -103,9 +103,9 @@ export default function UserManagement() {
         return;
       }
 
-      // Intentar borrado en la tabla 'perfiles'
+      // Intentar borrado en la tabla 'usuarios'
       const { error } = await supabase
-        .from('perfiles')
+        .from('usuarios')
         .delete()
         .eq('id', cleanId);
 
@@ -118,7 +118,7 @@ export default function UserManagement() {
           if (desactivar) {
             // Nota: Se asume que la columna 'activo' existe. Si no, ajustar.
             await supabase
-              .from('perfiles')
+              .from('usuarios')
               .update({ activo: false } as any) // as any en caso de que la interfaz no la tenga
               .eq('id', cleanId);
             alert('Usuario desactivado correctamente.');
@@ -154,7 +154,7 @@ export default function UserManagement() {
         // UPDATE (Solo public.usuarios)
         const { error: rpcError } = await supabase.rpc('cambiar_rol_usuario', { p_usuario_id: editingId, p_nuevo_rol: rol })
         if (rpcError) throw rpcError
-        const { error } = await supabase.from('perfiles').update({ 
+        const { error } = await supabase.from('usuarios').update({ 
           nombre: nombre,
           correo: email,
           rol: rol || 'administracion',
@@ -176,7 +176,7 @@ export default function UserManagement() {
         if (authError) throw new Error(authError.message)
         if (!authData.user) throw new Error('No se pudo crear el usuario.')
 
-        const { error: insertError } = await supabase.from('perfiles').upsert({
+        const { error: insertError } = await supabase.from('usuarios').upsert({
           id: authData.user.id,
           nombre: nombre,
           correo: email,
@@ -276,34 +276,34 @@ export default function UserManagement() {
               
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nombre Completo *</label>
-                <input type="text" required value={nombre} onChange={e => setNombre(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
+                <input type="text" required value={nombre || ''} onChange={e => setNombre(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
               </div>
               {!isEditing && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cédula / RIF *</label>
-                    <input type="text" required value={cedula} onChange={e => setCedula(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
+                    <input type="text" required value={cedula || ''} onChange={e => setCedula(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Teléfono *</label>
-                    <input type="text" required value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
+                    <input type="text" required value={telefono || ''} onChange={e => setTelefono(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
                   </div>
                 </div>
               )}
               {!isEditing && (
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Dirección</label>
-                  <input type="text" value={direccion} onChange={e => setDireccion(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
+                  <input type="text" value={direccion || ''} onChange={e => setDireccion(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" />
                 </div>
               )}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Correo Electrónico *</label>
-                <input type="email" required value={email} onChange={e => setEmail(e.target.value)} disabled={isEditing} className={`w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800 ${isEditing ? 'bg-slate-100 text-slate-500' : ''}`} />
+                <input type="email" required value={email || ''} onChange={e => setEmail(e.target.value)} disabled={isEditing} className={`w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800 ${isEditing ? 'bg-slate-100 text-slate-500' : ''}`} />
               </div>
               {!isEditing && (
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Contraseña Temporal *</label>
-                  <input type="text" required value={password} onChange={e => setPassword(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" placeholder="Min. 6 caracteres" minLength={6} />
+                  <input type="text" required value={password || ''} onChange={e => setPassword(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 focus:border-slate-400 focus:ring-1 focus:ring-slate-900 outline-none text-sm text-slate-800" placeholder="Min. 6 caracteres" minLength={6} />
                 </div>
               )}
               <div>
@@ -319,7 +319,7 @@ export default function UserManagement() {
               <div className="pt-5 border-t border-slate-100 flex justify-end gap-3 mt-6">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 h-10 rounded-lg font-medium text-slate-600 hover:bg-slate-100 transition-colors text-sm">Cancelar</button>
                 <button type="submit" disabled={formLoading} className="px-4 h-10 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 text-sm">
-                  {formLoading ? 'Registrando...' : 'Confirmar Registro'}
+                  {formLoading ? 'Procesando...' : (isEditing ? 'Guardar Cambios' : 'Confirmar Registro')}
                 </button>
               </div>
             </form>
