@@ -129,7 +129,7 @@ export default function OwnerDashboard({
         .select(`
           id, estado, total_usd, total_bs, fecha_creacion,
           cliente:clientes!fk_ordenes_cliente ( nombre ),
-          vendedor:perfiles!fk_ordenes_vendedor ( nombre ),
+          vendedor:usuarios!vendedor_id ( nombre ),
           orden_items ( cantidad, productos ( nombre ) )
         `)
         .gte('fecha_creacion', `${startDate}T00:00:00.000Z`)

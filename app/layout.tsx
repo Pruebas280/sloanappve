@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ERP-Master",
+  title: "adraz-sloan",
   description: "Sistema de Gestión y Control Empresarial",
 };
 

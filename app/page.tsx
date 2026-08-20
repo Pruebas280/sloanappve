@@ -37,7 +37,7 @@ export default function AppHub() {
 
         if (session) {
           setSession(session)
-          const { data } = await supabase.from('perfiles').select('nombre, rol').eq('id', session.user.id).maybeSingle()
+          const { data } = await supabase.from('usuarios').select('nombre, rol').eq('id', session.user.id).maybeSingle()
           if (isMounted) {
             const nombreUsuario = data?.nombre || session.user.user_metadata?.nombre || session.user.email?.split('@')[0] || "Usuario";
             const rolUsuario = data?.rol || "administracion";
@@ -56,7 +56,7 @@ export default function AppHub() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
         setSession(session)
-        const { data } = await supabase.from('perfiles').select('nombre, rol').eq('id', session.user.id).maybeSingle()
+        const { data } = await supabase.from('usuarios').select('nombre, rol').eq('id', session.user.id).maybeSingle()
         if (isMounted) {
           const nombreUsuario = data?.nombre || session.user.user_metadata?.nombre || session.user.email?.split('@')[0] || "Usuario";
           const rolUsuario = data?.rol || "administracion";

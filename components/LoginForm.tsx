@@ -26,7 +26,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       
       // Consultar el rol en public.perfiles
       let { data: profileData, error: profileError } = await supabase
-        .from('perfiles')
+        .from('usuarios')
         .select('nombre, rol')
         .eq('id', authData.user.id)
         .maybeSingle()
@@ -34,10 +34,10 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       // Si no existe en la base de datos (ej. usuario primerizo), lo creamos como owner por defecto
       if (!profileData && !profileError) {
         const { data: newProfile, error: insertError } = await supabase
-          .from('perfiles')
+          .from('usuarios')
           .insert({
             id: authData.user.id,
-            correo: authData.user.email || email,
+            email: authData.user.email || email,
             nombre: authData.user.email?.split('@')[0] || 'Admin',
             rol: 'owner',
             created_at: new Date().toISOString()

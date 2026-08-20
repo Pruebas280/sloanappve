@@ -55,7 +55,7 @@ export default function UserManagement() {
 
   const fetchUsuarios = async () => {
     setLoading(true)
-    const { data, error } = await supabase.from('usuarios').select('*').order('created_at', { ascending: false })
+    const { data, error } = await supabase.from('usuarios').select('*').order('fecha_creacion', { ascending: false })
     if (!error && data) {
       setUsuarios(data)
     }
@@ -156,13 +156,13 @@ export default function UserManagement() {
         if (rpcError) throw rpcError
         const { error } = await supabase.from('usuarios').update({ 
           nombre: nombre,
-          correo: email,
+          email: email,
           rol: rol || 'administracion',
           direccion: direccion || null
         }).eq('id', editingId)
         if (error) throw error
         alert('Perfil actualizado correctamente')
-        setUsuarios(prev => prev.map(u => u.id === editingId ? { ...u, nombre, rol, correo: email, direccion } : u))
+        setUsuarios(prev => prev.map(u => u.id === editingId ? { ...u, nombre, rol, email: email, direccion } : u))
       } else {
         // INSERT (Auth + public.usuarios)
         const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
@@ -179,7 +179,7 @@ export default function UserManagement() {
         const { error: insertError } = await supabase.from('usuarios').upsert({
           id: authData.user.id,
           nombre: nombre,
-          correo: email,
+          email: email,
           rol: rol || 'administracion',
           direccion: direccion || null,
           created_at: new Date().toISOString()
@@ -233,7 +233,7 @@ export default function UserManagement() {
               ) : usuarios.map(user => (
                 <tr key={user.id} className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 text-slate-800 text-sm">
                   <td className="py-3 px-4 font-semibold text-slate-900">{user.nombre || user.nombre_completo || 'Sin Nombre'}</td>
-                  <td className="py-3 px-4 text-slate-600">{user.correo || user.email || 'Sin Correo'}</td>
+                  <td className="py-3 px-4 text-slate-600">{user.email || 'Sin Correo'}</td>
                   <td className="py-3 px-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium border
                       ${(user.rol || 'administracion') === 'owner' ? 'bg-slate-900 text-white border-slate-900' :

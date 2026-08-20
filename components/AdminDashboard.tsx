@@ -101,7 +101,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
     try {
       const { data, error } = await supabase
         .from('ordenes')
-        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), orden_items ( *, productos ( nombre, sku ) )')
+        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), usuarios!vendedor_id ( nombre, email ), orden_items ( *, productos ( nombre, sku ) )')
         .eq('modalidad_pago', 'Crédito')
         .in('estado', ['pendiente', 'aprobado', 'entregado', 'pendiente_pago', 'esperando_aprobacion'])
         .order('fecha_creacion', { ascending: false })
@@ -116,7 +116,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
     try {
       const { data, error } = await supabase
         .from('ordenes')
-        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), orden_items ( *, productos ( nombre, sku ) )')
+        .select('*, clientes ( nombre, cedula_rif, direccion, telefono ), usuarios!vendedor_id ( nombre, email ), orden_items ( *, productos ( nombre, sku ) )')
         .eq('estado', 'pagado')
         .order('fecha_creacion', { ascending: false })
       if (error) throw error
@@ -404,10 +404,17 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
 
   const marcarComoPagado = async (ordenId: string) => {
     try {
+      // Remover de la UI inmediatamente
+      setCuentasCobrar(prev => prev.filter(o => o.id !== ordenId))
+      
       const { error } = await supabase.from('ordenes').update({ estado: 'pagado' }).eq('id', ordenId)
-      if (error) throw error
+      if (error) {
+        // Revertir si hay error
+        fetchCuentasCobrar()
+        throw error
+      }
+      
       alert('Orden marcada como pagada.')
-      fetchCuentasCobrar()
       fetchPagosProcesados()
     } catch(err:any) {
       alert('Error marcando orden pagada: ' + err.message)
@@ -438,15 +445,34 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       doc.setFillColor(224, 242, 254)
       doc.rect(0, 0, 600, 100, 'F')
 
-      // 1. Cabecera Corporativa
+      // 1. Cabecera Corporativa y Logos
+      const fetchBase64 = async (url: string) => {
+        try {
+          const res = await fetch(url)
+          const blob = await res.blob()
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.readAsDataURL(blob)
+          })
+        } catch (e) {
+          return null
+        }
+      }
+
+      const [globalB64, sloanB64, fluidB64] = await Promise.all([
+        fetchBase64('/logos/global.png'),
+        fetchBase64('/logos/sloan.jpeg'),
+        fetchBase64('/logos/fluidmaster.png')
+      ])
+
+      if (globalB64) doc.addImage(globalB64, 'PNG', 40, 15, 50, 15)
+      if (sloanB64) doc.addImage(sloanB64, 'JPEG', 100, 15, 50, 15)
+      if (fluidB64) doc.addImage(fluidB64, 'PNG', 160, 15, 50, 15)
+
       doc.setFontSize(20)
       doc.setTextColor(2, 132, 199) // Azul Rey brillante
       doc.text('NOTA DE ENTREGA', 40, 50)
-      
-      doc.setFontSize(10)
-      doc.setTextColor(100)
-      doc.text('Rif: J-12345678-9 | Telf: +58 412-1234567', 40, 65)
-      doc.text('Av. Principal, Edificio Empresarial, PB.', 40, 78)
 
       // Cuadro de Número de Orden
       doc.setFillColor(2, 132, 199) // Azul Océano
@@ -652,7 +678,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
 
             {ordenSubTab === 'completadas' && (
               <button 
-                onClick={() => generarReporteCompletadasPDF(ordenes.filter(o => ['completada', 'despachada', 'entregada', 'entregado'].includes(o.estado?.toLowerCase() || '')))}
+                onClick={() => generarReporteCompletadasPDF(ordenes.filter(o => ['completada', 'despachada', 'entregada', 'entregado', 'pagado'].includes(o.estado?.toLowerCase() || '')))}
                 className="mb-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
               >
                 <FileText className="w-4 h-4" /> Exportar Reporte PDF
@@ -662,8 +688,8 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
           
           {(() => {
             const listToShow = ordenSubTab === 'pendientes' 
-              ? ordenes.filter(o => !['completada', 'despachada', 'entregada', 'entregado'].includes(o.estado?.toLowerCase() || ''))
-              : ordenes.filter(o => ['completada', 'despachada', 'entregada', 'entregado'].includes(o.estado?.toLowerCase() || ''));
+              ? ordenes.filter(o => !['completada', 'despachada', 'entregada', 'entregado', 'pagado'].includes(o.estado?.toLowerCase() || ''))
+              : ordenes.filter(o => ['completada', 'despachada', 'entregada', 'entregado', 'pagado'].includes(o.estado?.toLowerCase() || ''));
 
             if (isLoading && ordenes.length === 0) {
               return <p className="text-slate-500 font-medium animate-pulse text-sm">Cargando órdenes...</p>

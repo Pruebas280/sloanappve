@@ -10,7 +10,7 @@ const supabase = createBrowserClient(supabaseUrl, supabaseKey)
 
 interface OrdenDespacho {
   id: string
-  creado_en: string
+  fecha_creacion: string
   estado: string
   direccion_envio?: string
   clientes: {
@@ -53,9 +53,9 @@ export default function AlmacenDashboard() {
     try {
       const { data, error } = await supabase
         .from('ordenes')
-        .select('id, creado_en, estado, direccion_envio, clientes(nombre, cedula_rif, direccion, telefono), orden_items(id, cantidad, producto_id, productos(*))')
+        .select('id, fecha_creacion, estado, direccion_envio, clientes(nombre, cedula_rif, direccion, telefono), orden_items(id, cantidad, producto_id, productos(*))')
         .in('estado', ['aprobado', 'entregado'])
-        .order('creado_en', { ascending: false })
+        .order('fecha_creacion', { ascending: false })
 
       if (error) throw error
       setOrdenes((data as unknown) as OrdenDespacho[])
@@ -65,9 +65,9 @@ export default function AlmacenDashboard() {
       try {
         const { data, error } = await supabase
           .from('ordenes')
-          .select('id, creado_en, estado, direccion_envio, clientes(nombre, cedula_rif, direccion, telefono), orden_items(id, cantidad, producto_id, productos(*))')
+          .select('id, fecha_creacion, estado, direccion_envio, clientes(nombre, cedula_rif, direccion, telefono), orden_items(id, cantidad, producto_id, productos(*))')
           .in('estado', ['aprobado', 'entregado'])
-          .order('creado_en', { ascending: false })
+          .order('fecha_creacion', { ascending: false })
         if (error) throw error
         setOrdenes((data as unknown) as OrdenDespacho[])
       } catch (fallbackErr: any) {
@@ -267,7 +267,7 @@ export default function AlmacenDashboard() {
                     {orden.estado === 'aprobado' && <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-1.5 rounded-full border border-indigo-200 shadow-sm flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>Aprobado (Preparar)</span>}
                     {orden.estado === 'entregado' && <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1.5 rounded-full border border-green-200 shadow-sm flex items-center gap-1">✅ Entregado</span>}
                     
-                    <span className="text-xs font-bold text-slate-400">{new Date(orden.creado_en).toLocaleString()}</span>
+                    <span className="text-xs font-bold text-slate-400">{new Date(orden.fecha_creacion).toLocaleString()}</span>
                   </div>
                   
                   <h3 className="font-black text-xl text-slate-800 mb-4">Orden #{orden.id.split('-')[0]}</h3>
