@@ -33,6 +33,8 @@ export interface Cliente {
 
 export interface CartItem extends Producto {
   cantidad_carrito: number
+  precio_unitario_editable: number
+  moneda_aplicada: 'USD' | 'BCV'
 }
 
 // ============================================================================
@@ -44,22 +46,24 @@ export default function VendedorPOS() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [mensaje, setMensaje] = useState<{ tipo: 'exito' | 'error', texto: string } | null>(null)
   
-  // Estado del Formulario de Orden
+  // Estados de la Orden
   const [selectedCliente, setSelectedCliente] = useState<string>('')
-  const [metodoPago, setMetodoPago] = useState<string>('Zelle')
+  const [metodoPago, setMetodoPago] = useState<string>('Transferencia')
   const [modalidadPago, setModalidadPago] = useState<string>('Contado')
-  const [diasCredito, setDiasCredito] = useState<number>(0)
-  const [inicialMonto, setInicialMonto] = useState<number>(0)
+  const [inicialMonto, setInicialMonto] = useState<number | null>(null)
+  const [diasCredito, setDiasCredito] = useState<number | null>(null)
   const [condicionEntrega, setCondicionEntrega] = useState<string>('Retiro')
   const [direccionEnvio, setDireccionEnvio] = useState<string>('')
   const [precioPersonalizado, setPrecioPersonalizado] = useState<boolean>(false)
   const [totalPersonalizado, setTotalPersonalizado] = useState<number>(0)
+  const [porcentajeDescuento, setPorcentajeDescuento] = useState<number>(0)
+  const [aplicarIVA, setAplicarIVA] = useState<boolean>(false)
   const [showClientModal, setShowClientModal] = useState<boolean>(false)
-  // comprobante state removed
-  const [tasaCambio, setTasaCambio] = useState<number>(36.5)
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
-  const [mensaje, setMensaje] = useState<{ tipo: 'exito' | 'error', texto: string } | null>(null)
+  const [tasaCambio, setTasaCambio] = useState<number>(36.5)
 
   // Carga inicial de datos
   useEffect(() => {
@@ -82,12 +86,9 @@ export default function VendedorPOS() {
     fetchData()
   }, [])
 
-  // ============================================================================
-  // LÓGICA DE NEGOCIO Y MANEJADORES
-  // ============================================================================
-
-  // Filtro de catálogo en tiempo real
+  // Filtrado de Productos
   const productosFiltrados = useMemo(() => {
+    if (!searchQuery) return productos
     const q = searchQuery.toLowerCase()
     return productos.filter(p => 
       p.nombre.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
@@ -95,7 +96,14 @@ export default function VendedorPOS() {
   }, [productos, searchQuery])
 
   // Totales
-  const totalUSD = cart.reduce((acc, item) => acc + (item.precio_usd * item.cantidad_carrito), 0)
+  const subtotalUSD = cart.reduce((acc, item) => {
+    // Ambos valores (USD y BCV) representan montos directos en USD. 1:1
+    let price = item.precio_unitario_editable !== undefined ? item.precio_unitario_editable : item.precio_usd;
+    return acc + (price * item.cantidad_carrito);
+  }, 0)
+
+  const montoDescuento = subtotalUSD * (porcentajeDescuento / 100);
+  const totalUSD = subtotalUSD - montoDescuento;
 
   // Manejador del Carrito (Sumar/Restar con validación de stock)
   const handleUpdateCart = (producto: Producto, delta: number) => {
@@ -114,11 +122,31 @@ export default function VendedorPOS() {
         return prev.map(item => item.id === producto.id ? { ...item, cantidad_carrito: nuevaCantidad } : item)
       } else {
         if (delta > 0 && producto.stock_disponible >= delta) {
-          return [...prev, { ...producto, cantidad_carrito: delta }]
+          return [...prev, { 
+            ...producto, 
+            cantidad_carrito: delta, 
+            precio_unitario_editable: producto.precio_usd, 
+            moneda_aplicada: 'USD' 
+          }]
         }
         return prev
       }
     })
+  }
+
+  const handleEditPrice = (id: string, newPrice: number) => {
+    setCart(prev => prev.map(item => item.id === id ? { ...item, precio_unitario_editable: newPrice } : item))
+  }
+
+  const handleEditCurrency = (id: string, newCurrency: 'USD' | 'BCV') => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        // Ambos valores son directos en USD
+        const suggestedPrice = newCurrency === 'USD' ? item.precio_usd : (item.precio_bs || item.precio_usd);
+        return { ...item, moneda_aplicada: newCurrency, precio_unitario_editable: suggestedPrice }
+      }
+      return item;
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -154,9 +182,11 @@ export default function VendedorPOS() {
         direccion_envio: direccionEnvio || clientes.find(c => c.id === selectedCliente)?.direccion || 'Sin dirección especificada',
         precio_personalizado: precioPersonalizado ? (Number(totalPersonalizado) || null) : null,
         estado: 'aprobado',
-        observaciones: 'Orden registrada desde Vendedor POS App',
+        observaciones: `Orden registrada desde Vendedor POS App. ${porcentajeDescuento > 0 ? `Descuento aplicado: ${porcentajeDescuento}% (Monto: $${montoDescuento.toFixed(2)})` : ''}`,
         total_bs: 0,
-        tasa_cambio: 0
+        tasa_cambio: 1, // Todo en dólares
+        porcentaje_descuento: porcentajeDescuento || 0,
+        monto_descuento: montoDescuento || 0
       }
 
       const { data: ordenData, error: ordenError } = await supabase
@@ -168,13 +198,16 @@ export default function VendedorPOS() {
       if (ordenError) throw new Error(`Fallo creando orden: ${ordenError.message}`)
 
       // 4. Insertar los items en 'orden_items'
-      const ordenItems = cart.map(item => ({
-        orden_id: ordenData.id,
-        producto_id: item.id,
-        cantidad: item.cantidad_carrito,
-        precio_unitario_usd: item.precio_usd,
-        precio_unitario_bs: 0
-      }))
+      const ordenItems = cart.map(item => {
+        const finalUsd = item.precio_unitario_editable !== undefined ? item.precio_unitario_editable : item.precio_usd;
+        return {
+          orden_id: ordenData.id,
+          producto_id: item.id,
+          cantidad: item.cantidad_carrito,
+          precio_unitario_usd: finalUsd,
+          precio_unitario_bs: finalUsd // Todo es en dólares directo, replicamos el valor si se requiriera en bd vieja
+        }
+      })
 
       const { error: itemsError } = await supabase.from('orden_items').insert(ordenItems)
       if (itemsError) throw new Error(`Fallo registrando items: ${itemsError.message}`)
@@ -224,10 +257,10 @@ export default function VendedorPOS() {
   // RENDER (UI/UX)
   // ============================================================================
   return (
-    <div className="flex flex-col md:flex-row w-full min-h-screen bg-slate-50 font-sans text-slate-800">
+    <div className="grid grid-cols-1 md:grid-cols-12 w-full min-h-screen bg-slate-50 font-sans text-slate-800">
       
       {/* ---------------- IZQUIERDA: CATÁLOGO Y BÚSQUEDA ---------------- */}
-      <div className="flex-1 p-4 md:p-6 flex flex-col h-full overflow-hidden">
+      <div className="md:col-span-7 lg:col-span-8 p-4 md:p-6 flex flex-col h-screen overflow-hidden">
         
         {/* Encabezado Catálogo */}
         <div className="mb-6">
@@ -288,28 +321,45 @@ export default function VendedorPOS() {
       </div>
 
       {/* ---------------- DERECHA: CARRITO Y FORMULARIO DE ORDEN ---------------- */}
-      <div className="w-full md:w-[400px] lg:w-[450px] bg-white border-l border-slate-200 shadow-2xl flex flex-col z-10 md:h-screen">
+      <div className="md:col-span-5 lg:col-span-4 bg-white border-l border-slate-200 shadow-2xl flex flex-col z-10 md:h-screen">
         
         <div className="p-6 border-b border-slate-100 bg-indigo-50">
           <h2 className="text-xl font-black text-indigo-900">Carrito de Orden</h2>
         </div>
 
         {/* Lista de Items */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+        <div className="flex-1 min-h-[160px] max-h-[300px] overflow-y-auto p-4 bg-slate-50">
           {cart.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400 font-medium text-center">
+            <div className="h-full min-h-[160px] flex items-center justify-center text-slate-400 font-medium text-center">
               Tu carrito está vacío.<br/>Agrega productos desde el catálogo.
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 p-2">
               {cart.map(item => (
-                <div key={item.id} className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-                  <div className="flex-1 pr-4">
+                <div key={item.id} className="flex flex-col gap-2 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                  <div className="flex justify-between items-center">
                     <h4 className="font-bold text-sm leading-tight text-slate-700 line-clamp-1">{item.nombre}</h4>
-                    <p className="text-xs text-slate-500 mt-1">{item.cantidad_carrito} un. x ${item.precio_usd}</p>
+                    <span className="text-xs font-bold text-slate-500">{item.cantidad_carrito} un.</span>
                   </div>
-                  <div className="font-black text-indigo-700 whitespace-nowrap">
-                    ${(item.precio_usd * item.cantidad_carrito).toFixed(2)}
+                  <div className="flex items-center gap-2 mt-1">
+                    <select 
+                      className="h-8 bg-slate-50 border border-slate-200 rounded px-2 text-xs font-bold text-slate-700 outline-none"
+                      value={item.moneda_aplicada}
+                      onChange={(e) => handleEditCurrency(item.id, e.target.value as 'USD' | 'BCV')}
+                    >
+                      <option value="USD">Dólar $</option>
+                      <option value="BCV">Dólar BCV</option>
+                    </select>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="h-8 flex-1 bg-slate-50 border border-slate-200 rounded px-2 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500"
+                      value={item.precio_unitario_editable}
+                      onChange={(e) => handleEditPrice(item.id, Number(e.target.value))}
+                    />
+                    <div className="font-black text-indigo-700 whitespace-nowrap ml-2">
+                      ${((item.precio_unitario_editable) * item.cantidad_carrito).toFixed(2)}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -318,13 +368,39 @@ export default function VendedorPOS() {
         </div>
 
         {/* Footer: Totales y Formulario */}
-        <div className="p-6 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="flex-1 overflow-y-auto p-6 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] mt-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             
+            {/* Controles de Descuento e IVA */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-slate-700 mb-2">Descuento (%)</label>
+                <input 
+                  type="number" 
+                  min="0" max="20"
+                  className="w-full h-12 bg-slate-50 border border-slate-200 rounded-lg px-4 font-medium text-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                  value={porcentajeDescuento}
+                  onChange={(e) => setPorcentajeDescuento(Number(e.target.value))}
+                />
+              </div>
+              {/* Removed IVA toggle */}
+            </div>
+
             {/* Totales */}
-            <div className="bg-indigo-900 text-white p-4 rounded-2xl flex flex-col gap-1">
+            <div className="bg-indigo-900 text-white p-5 rounded-2xl flex flex-col gap-3 shadow-md">
+              <div className="flex justify-between items-center text-indigo-200 text-sm">
+                <span>Subtotal:</span>
+                <span>${subtotalUSD.toFixed(2)}</span>
+              </div>
+              {porcentajeDescuento > 0 && (
+                <div className="flex justify-between items-center text-red-300 text-sm">
+                  <span>Descuento ({porcentajeDescuento}%):</span>
+                  <span>-${montoDescuento.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="border-t border-indigo-700 my-1"></div>
               <div className="flex justify-between items-center">
-                <span className="text-indigo-200 font-medium">Total USD:</span>
+                <span className="text-indigo-100 font-medium">Total General USD:</span>
                 <span className="text-2xl font-black">${totalUSD.toFixed(2)}</span>
               </div>
             </div>

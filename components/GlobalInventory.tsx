@@ -480,7 +480,7 @@ export default function GlobalInventory({ hideHeader = false }: { hideHeader?: b
                       <input required type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" value={manualForm.precio_usd} onChange={e => setManualForm({...manualForm, precio_usd: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Precio Bs. (Opcional)</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Precio BCV</label>
                       <input type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" placeholder="Autocalculado" value={manualForm.precio_bs} onChange={e => setManualForm({...manualForm, precio_bs: e.target.value})} />
                     </div>
                   </div>

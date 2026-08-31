@@ -25,6 +25,8 @@ interface OrdenAdmin {
   direccion_envio?: string
   vendedor_id?: string
   fecha_actualizacion?: string
+  porcentaje_descuento?: number
+  monto_descuento?: number
   clientes: { nombre: string; cedula_rif: string; direccion?: string; telefono?: string } | null
   usuarios: { nombre: string } | null // Vendedor
   orden_items: {
@@ -539,8 +541,9 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       const finalY = (doc as any).lastAutoTable?.finalY || 170
       
       const totalUSD = Number(orden.total_usd || 0)
-      const baseImponible = totalUSD / 1.16
-      const iva = totalUSD - baseImponible
+      const descuentoPorcentaje = orden.porcentaje_descuento || 0
+      const descuentoMonto = orden.monto_descuento || 0
+      const subtotal = totalUSD + descuentoMonto;
 
       doc.setFontSize(10)
       doc.setTextColor(100)
@@ -548,11 +551,14 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       // Términos en margen izquierdo (X=40 -> ~14mm)
       doc.text('Términos: Los pagos deben confirmarse antes del despacho.', 40, finalY + 45, { maxWidth: 200 })
       
-      const totalsRows = [
-        ['Base Imponible:', `$${baseImponible.toFixed(2)}`],
-        ['IVA (16%):', `$${iva.toFixed(2)}`],
-        ['TOTAL GENERAL:', `$${totalUSD.toFixed(2)}`]
-      ]
+      const totalsRows = []
+      totalsRows.push(['Subtotal:', `$${subtotal.toFixed(2)}`])
+      
+      if (descuentoPorcentaje > 0) {
+        totalsRows.push([`Descuento (${descuentoPorcentaje}%):`, `-$${descuentoMonto.toFixed(2)}`])
+      }
+      
+      totalsRows.push(['TOTAL GENERAL:', `$${totalUSD.toFixed(2)}`])
 
       autoTable(doc, {
         body: totalsRows,
@@ -565,7 +571,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
           1: { halign: 'right' }
         },
         didParseCell: function(data: any) {
-          if (data.row.index === 2) {
+          if (data.row.index === totalsRows.length - 1) { // Última fila (TOTAL GENERAL)
             data.cell.styles.fillColor = [224, 242, 254] // #E0F2FE
             data.cell.styles.textColor = [2, 132, 199]   // #0284C7
             data.cell.styles.fontStyle = 'bold'

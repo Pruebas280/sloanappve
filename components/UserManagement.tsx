@@ -164,35 +164,20 @@ export default function UserManagement() {
         alert('Perfil actualizado correctamente')
         setUsuarios(prev => prev.map(u => u.id === editingId ? { ...u, nombre, rol, email: email, direccion } : u))
       } else {
-        // INSERT (Auth + public.usuarios)
-        const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { nombre, cedula_rif: cedula, telefono, direccion, rol }
-          }
-        })
-
-        if (authError) throw new Error(authError.message)
-        if (!authData.user) throw new Error('No se pudo crear el usuario.')
-
-        const { error: insertError } = await supabase.from('usuarios').upsert({
-          id: authData.user.id,
-          nombre: nombre,
-          email: email,
-          rol: rol || 'administracion',
-          direccion: direccion || null,
-          created_at: new Date().toISOString()
-        })
+        // INSERT (Auth + public.usuarios) via API route
+        const res = await fetch('/api/admin/create-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, nombre, rol, cedula, telefono, direccion })
+        });
         
-        if (insertError) {
-          if (insertError.code === '23505') {
-            console.warn("Perfil ya creado por trigger (duplicado), se actualizará en su lugar.");
-          } else {
-            console.warn("Fallo inserción manual, tal vez el trigger ya lo hizo:", insertError)
-          }
+        const result = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(result.error || 'Error al crear el usuario en la API');
         }
-        alert('Usuario creado exitosamente.')
+        
+        alert('Usuario creado exitosamente.');
       }
 
       setShowModal(false)
