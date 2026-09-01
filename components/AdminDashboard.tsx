@@ -464,17 +464,34 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
 
       const [globalB64, sloanB64, fluidB64] = await Promise.all([
         fetchBase64('/logos/global.png'),
-        fetchBase64('/logos/sloan.jpeg'),
+        fetchBase64('/logos/sloan.png'),
         fetchBase64('/logos/fluidmaster.png')
       ])
 
-      if (globalB64) doc.addImage(globalB64, 'PNG', 40, 15, 50, 15)
-      if (sloanB64) doc.addImage(sloanB64, 'JPEG', 100, 15, 50, 15)
-      if (fluidB64) doc.addImage(fluidB64, 'PNG', 160, 15, 50, 15)
+      let currentX = 40;
+      const logoHeight = 22; // Altura proporcional mejorada
+
+      if (globalB64) {
+        const props = doc.getImageProperties(globalB64);
+        const width = (props.width * logoHeight) / props.height;
+        doc.addImage(globalB64, 'PNG', currentX, 15, width, logoHeight);
+        currentX += width + 20; // 20pt de separación
+      }
+      if (sloanB64) {
+        const props = doc.getImageProperties(sloanB64);
+        const width = (props.width * logoHeight) / props.height;
+        doc.addImage(sloanB64, 'PNG', currentX, 15, width, logoHeight);
+        currentX += width + 20;
+      }
+      if (fluidB64) {
+        const props = doc.getImageProperties(fluidB64);
+        const width = (props.width * logoHeight) / props.height;
+        doc.addImage(fluidB64, 'PNG', currentX, 15, width, logoHeight);
+      }
 
       doc.setFontSize(20)
       doc.setTextColor(2, 132, 199) // Azul Rey brillante
-      doc.text('NOTA DE ENTREGA', 40, 50)
+      doc.text('NOTA DE ENTREGA', 40, 55) // Ajustado ligeramente hacia abajo por el aumento de logo
 
       // Cuadro de Número de Orden
       doc.setFillColor(2, 132, 199) // Azul Océano
@@ -488,30 +505,42 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       // 2. Datos del Cliente y Vendedor
       doc.setFontSize(11)
       doc.setTextColor(0)
-      doc.text(`Cliente: ${orden.clientes?.nombre || 'N/A'}`, 40, 110)
-      doc.text(`RIF / CI: ${orden.clientes?.cedula_rif || 'N/A'}`, 40, 125)
+      
+      // Espaciado vertical (interlineado) ajustado a 16pt para mayor limpieza
+      // startY incrementado a 120 para tener 20pt de margen desde el borde inferior del header azul (que termina en Y=100)
+      const startY = 120;
+      const lineHeight = 16;
+      
+      doc.text(`Cliente: ${orden.clientes?.nombre || 'N/A'}`, 40, startY)
+      doc.text(`RIF / CI: ${orden.clientes?.cedula_rif || 'N/A'}`, 40, startY + lineHeight)
       
       const dirFiscal = orden.clientes?.direccion || 'No especificada'
-      doc.text(`Dir. Fiscal: ${dirFiscal}`, 40, 140, { maxWidth: 300 })
+      const lineasDirFiscal = doc.splitTextToSize(`Dir. Fiscal: ${dirFiscal}`, 300)
+      doc.text(lineasDirFiscal, 40, startY + (lineHeight * 2))
       
-      let dirY = 155
+      let dirY = startY + (lineHeight * 2) + (lineasDirFiscal.length * lineHeight)
       if (orden.direccion_envio && orden.direccion_envio !== dirFiscal) {
-        doc.text(`Dir. Envío: ${orden.direccion_envio}`, 40, dirY, { maxWidth: 300 })
-        dirY += 15
+        const lineasDirEnvio = doc.splitTextToSize(`Dir. Envío: ${orden.direccion_envio}`, 300)
+        doc.text(lineasDirEnvio, 40, dirY)
+        dirY += (lineasDirEnvio.length * lineHeight)
       }
       
       doc.text(`Condición: ${orden.condicion_entrega || 'Retiro'}`, 40, dirY)
       
-      doc.text(`Fecha: ${new Date(orden.fecha_creacion || orden.creado_en || Date.now()).toLocaleDateString()}`, 400, 110)
-      doc.text(`Ejecutivo: ${orden.usuarios?.nombre || 'N/A'}`, 400, 125)
-      doc.text(`Pago: ${orden.metodo_pago}`, 400, 140)
+      // Columna Derecha (Datos de Orden) - Alineación sincronizada con el interlineado nuevo
+      doc.text(`Fecha: ${new Date(orden.fecha_creacion || orden.creado_en || Date.now()).toLocaleDateString()}`, 400, startY)
+      doc.text(`Ejecutivo: ${orden.usuarios?.nombre || 'N/A'}`, 400, startY + lineHeight)
+      doc.text(`Pago: ${orden.metodo_pago}`, 400, startY + (lineHeight * 2))
       
       const isCredito = orden.modalidad_pago === 'Crédito'
       if (isCredito) doc.setFontSize(8)
-      doc.text(isCredito ? `Modalidad: CRÉDITO | Inicial: $${Number(orden.inicial_monto || 0).toFixed(2)} | Plazo: ${orden.dias_credito} Días` : `Modalidad: CONTADO`, 400, 155)
-      if (isCredito) doc.setFontSize(11) // Restore font size
+      doc.text(isCredito ? `Modalidad: CRÉDITO | Inicial: $${Number(orden.inicial_monto || 0).toFixed(2)} | Plazo: ${orden.dias_credito} Días` : `Modalidad: CONTADO`, 400, startY + (lineHeight * 3))
+      if (isCredito) doc.setFontSize(11)
       
-      doc.text(`Estado: ${orden.estado.toUpperCase()}`, 400, 170)
+      doc.text(`Estado: ${orden.estado.toUpperCase()}`, 400, startY + (lineHeight * 4))
+      
+      // Asegurar que la tabla no se solape si los datos del cliente son muy largos
+      const finalHeaderY = Math.max(dirY + 20, startY + (lineHeight * 4) + 20, 185)
 
       // 3. Tabla de Productos
       const tableColumn = ["Cant.", "Código/SKU", "Descripción", "P.U USD", "Total USD"]
@@ -526,7 +555,7 @@ export default function AdminDashboard({ hideTabs = false, defaultTab: defaultTa
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        startY: 185,
+        startY: finalHeaderY,
         styles: { fontSize: 10, cellPadding: 5, lineColor: [224, 242, 254], lineWidth: 0.5 },
         headStyles: { fillColor: [2, 132, 199], textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [240, 249, 255] },
