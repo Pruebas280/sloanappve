@@ -5,15 +5,16 @@ import { createClient } from '@/lib/supabase/client'
 import { Mail, Lock, ShieldCheck } from 'lucide-react'
 
 interface LoginFormProps {
-  onSuccess: (user: any, profile: any) => void
+  /** Mensaje con el que abre el formulario, p. ej. cuando una sesión se rechazó por no tener perfil válido */
+  avisoInicial?: string | null
 }
 
-export default function LoginForm({ onSuccess }: LoginFormProps) {
+export default function LoginForm({ avisoInicial = null }: LoginFormProps) {
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(avisoInicial)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -21,38 +22,10 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
     setErrorMsg(null)
     try {
       // --- INICIO DE SESIÓN ---
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      // Aquí solo se validan credenciales. El perfil y el rol los verifica AppHub (app/page.tsx) al
+      // recibir la sesión: sin fila válida en 'usuarios' no se entra, nunca se crea ni se asume un rol.
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
       if (authError) throw new Error(`Credenciales incorrectas: ${authError.message}`)
-      
-      // Consultar el rol en public.perfiles
-      let { data: profileData, error: profileError } = await supabase
-        .from('usuarios')
-        .select('nombre, rol')
-        .eq('id', authData.user.id)
-        .maybeSingle()
-        
-      // Si no existe en la base de datos (ej. usuario primerizo), lo creamos como owner por defecto
-      if (!profileData && !profileError) {
-        const { data: newProfile, error: insertError } = await supabase
-          .from('usuarios')
-          .insert({
-            id: authData.user.id,
-            email: authData.user.email || email,
-            nombre: authData.user.email?.split('@')[0] || 'Admin',
-            rol: 'owner',
-            created_at: new Date().toISOString()
-          })
-          .select('nombre, rol')
-          .maybeSingle()
-          
-        if (insertError) throw new Error(`Error forzando perfil: ${insertError.message}`)
-        profileData = newProfile
-      } else if (profileError) {
-        throw new Error(`Error obteniendo perfil: ${profileError.message}`)
-      }
-      
-      onSuccess(authData.user, profileData)
-      
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Error desconocido al autenticar.')
     } finally {

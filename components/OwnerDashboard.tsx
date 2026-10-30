@@ -9,6 +9,7 @@ import VendedorPOS from '@/components/VendedorPOS'
 import GlobalInventory from '@/components/GlobalInventory'
 import UserManagement from '@/components/UserManagement'
 import ClientsManager from '@/components/ClientsManager'
+import type { Rol } from '@/lib/domain/roles'
 import { Crown, BarChart, Globe, CreditCard, Truck, ShoppingCart, Users, Briefcase, FileText, Trash2, CheckCircle2, X, Menu, Search, Bell, HelpCircle, PackageCheck, ClipboardCheck } from 'lucide-react'
 
 // ============================================================================
@@ -44,12 +45,12 @@ type OwnerTab = 'metricas' | 'inventario_global' | 'pagos' | 'logistica' | 'pos'
 // ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================
-export default function OwnerDashboard({ 
-  role = 'owner', 
-  userName = 'Admin System', 
-  onLogout 
-}: { 
-  role?: string, 
+export default function OwnerDashboard({
+  role,
+  userName = 'Admin System',
+  onLogout
+}: {
+  role: Rol,
   userName?: string, 
   onLogout?: () => void 
 }) {
