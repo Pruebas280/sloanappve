@@ -1,561 +1,448 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
-import * as XLSX from 'xlsx'
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { CircleCheck, CircleX, FileDown, LayoutGrid, List, LoaderCircle, Package, PackagePlus, PackageX, Pencil, Search, SearchX, Trash2, TriangleAlert, X, type LucideIcon } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { eliminarProducto, listarProductosActivos } from '@/lib/services/productos'
+import { leerRolActual } from '@/lib/services/usuarios'
+import { coincideProducto, estadoStock, imagenPrincipal, UMBRAL_STOCK_BAJO, type EstadoStock, type Producto } from '@/lib/domain/productos'
+import { precioSegunMoneda } from '@/lib/domain/precios'
+import { descargarInventarioPDF } from '@/lib/pdf/inventario'
+import { numero, plural, usd } from '@/lib/formato'
+import ProductoFormModal from '@/components/ProductoFormModal'
+import ImagenProducto from '@/components/ui/ImagenProducto'
+import Boton from '@/components/ui/Boton'
+import Pestanas from '@/components/ui/Pestanas'
+import { claseEntrada } from '@/components/ui/Campo'
+import { Bloque } from '@/components/ui/Esqueleto'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirmacion } from '@/components/ui/Confirmacion'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
-const supabase = createBrowserClient(supabaseUrl, supabaseKey)
+type Vista = 'tarjetas' | 'tabla'
+type Filtro = 'todos' | EstadoStock
 
-interface ProductoGlobal {
-  id: string
-  sku: string
-  nombre: string
-  descripcion: string
-  precio_usd: number
-  precio_bs: number
-  stock_disponible: number
-  stock_reservado: number
-  imagenes: string[] | null
-  activo: boolean
+// Siempre icono + texto: el color nunca es el único indicio
+const ESTADOS_STOCK: Record<EstadoStock, { etiqueta: string; icono: LucideIcon; clase: string }> = {
+  disponible: { etiqueta: 'En stock', icono: CircleCheck, clase: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+  bajo: { etiqueta: 'Stock bajo', icono: TriangleAlert, clase: 'bg-amber-50 text-amber-800 ring-amber-200' },
+  agotado: { etiqueta: 'Agotado', icono: PackageX, clase: 'bg-red-50 text-red-700 ring-red-200' },
+}
+
+// Roles que pueden crear, editar y borrar productos (los mismos de siempre, incluidos nombres antiguos)
+const ROLES_EDITORES = ['administracion', 'administrador', 'admin', 'owner']
+
+// La vista elegida (tarjetas o tabla) se recuerda en este navegador
+const CLAVE_VISTA = 'erp.inventario.vista'
+function leerVistaGuardada(): Vista {
+  try {
+    return localStorage.getItem(CLAVE_VISTA) === 'tabla' ? 'tabla' : 'tarjetas'
+  } catch {
+    return 'tarjetas'
+  }
 }
 
 export default function GlobalInventory({ hideHeader = false }: { hideHeader?: boolean }) {
-  const [productos, setProductos] = useState<ProductoGlobal[]>([])
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [userRole, setUserRole] = useState<string>('')
+  const [supabase] = useState(() => createClient())
+  const toast = useToast()
+  const confirmar = useConfirmacion()
 
-  // Estados del Modal
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalTab, setModalTab] = useState<'manual' | 'masivo'>('manual')
-  
-  // Estado para Edición
-  const [editingProduct, setEditingProduct] = useState<ProductoGlobal | null>(null)
-
-  // Formulario Manual
-  const [manualForm, setManualForm] = useState({
-    sku: '', nombre: '', categoria: '', precio_usd: '', precio_bs: '', stock: ''
-  })
-  const [selectedImage, setSelectedImage] = useState<File | null>(null)
-  const [isSavingManual, setIsSavingManual] = useState(false)
-
-  // Carga Masiva
-  const [parsedData, setParsedData] = useState<any[]>([])
-  const [isProcessing, setIsProcessing] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const fetchProductos = async () => {
-    if (supabaseUrl === 'https://placeholder.supabase.co') return
-    try {
-      const { data, error } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('activo', true)
-        .order('nombre', { ascending: true })
-      if (error) throw error
-      setProductos(data || [])
-    } catch (err) {
-      console.error('Error fetching inventario global:', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const [productos, setProductos] = useState<Producto[] | null>(null) // null = primera carga
+  const [errorCarga, setErrorCarga] = useState<string | null>(null)
+  const [recargas, setRecargas] = useState(0)
+  const [rol, setRol] = useState<string | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const consulta = useDeferredValue(busqueda)
+  const [filtro, setFiltro] = useState<Filtro>('todos')
+  const [vista, setVista] = useState<Vista>(leerVistaGuardada)
+  const [formulario, setFormulario] = useState<{ abierto: boolean; producto: Producto | null }>({ abierto: false, producto: null })
+  const [eliminando, setEliminando] = useState<string | null>(null)
+  const [exportando, setExportando] = useState(false)
 
   useEffect(() => {
-    const fetchUserRole = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        const { data } = await supabase.from('usuarios').select('rol').eq('id', session.user.id).maybeSingle()
-        if (data) setUserRole(data.rol)
-      }
-    }
-    fetchUserRole()
-    fetchProductos()
-    
-    const canal = supabase.channel('productos-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, fetchProductos)
-      .subscribe()
-    return () => { supabase.removeChannel(canal) }
-  }, [])
+    leerRolActual(supabase).then(setRol)
+  }, [supabase])
 
-  const filteredProductos = useMemo(() => {
-    const q = searchQuery.toLowerCase()
-    return productos.filter(p => p.nombre.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q)))
-  }, [productos, searchQuery])
-
-  const esAdmin = userRole?.toLowerCase() === 'administracion' || 
-                  userRole?.toLowerCase() === 'administrador' || 
-                  userRole?.toLowerCase() === 'admin' || 
-                  userRole?.toLowerCase() === 'owner';
-
-  const exportarInventarioPDF = async () => {
-    try {
-      const { default: jsPDF } = await import('jspdf')
-      const autoTable = (await import('jspdf-autotable')).default
-      
-      const doc = new jsPDF('p', 'pt', 'a4')
-
-      doc.setFillColor(224, 242, 254)
-      doc.rect(0, 0, 600, 80, 'F')
-      doc.setFontSize(22)
-      doc.setTextColor(2, 132, 199)
-      doc.text('REPORTE DE INVENTARIO', 40, 45)
-      doc.setFontSize(10)
-      doc.setTextColor(100)
-      doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, 40, 65)
-
-      const tableColumn = ["Código / ID", "Nombre del Producto", "Precio USD", "Stock Actual", "Estado"]
-      const tableRows = filteredProductos.map(p => [
-        p.sku || p.id.split('-')[0],
-        p.nombre,
-        `$${Number(p.precio_usd || 0).toFixed(2)}`,
-        p.stock_disponible,
-        p.activo ? 'Activo' : 'Inactivo'
-      ])
-
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        startY: 100,
-        styles: { fontSize: 9, cellPadding: 5, lineColor: [224, 242, 254], lineWidth: 0.5 },
-        headStyles: { fillColor: [2, 132, 199], textColor: [255, 255, 255] },
-        alternateRowStyles: { fillColor: [240, 249, 255] },
-        columnStyles: {
-          0: { cellWidth: 100 }, // ~35mm
-          // 1 is Auto
-          2: { cellWidth: 85, halign: 'right' }, // ~30mm
-          3: { cellWidth: 70, halign: 'center' }, // ~25mm
-          4: { cellWidth: 70, halign: 'center' }  // ~25mm
-        }
-      })
-
-      doc.save(`Inventario_${Date.now()}.pdf`)
-    } catch (error) {
-      alert("Error al generar PDF: " + (error as Error).message)
-    }
-  }
-
-  // ==========================================
-  // HELPER: SUBIR IMAGEN A STORAGE
-  // ==========================================
-  const uploadProductImage = async (file: File) => {
-    const fileExt = file.name.split('.').pop()
-    const fileName = `prod_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9]/g, '')}.${fileExt}`
-    
-    // Subir el archivo al bucket "productos"
-    const { error: uploadError } = await supabase.storage.from('productos').upload(fileName, file)
-    if (uploadError) throw uploadError
-    
-    // Obtener la URL pública
-    const { data } = supabase.storage.from('productos').getPublicUrl(fileName)
-    return data.publicUrl
-  }
-
-  async function handleCrearProducto(nuevoProducto: any) {
-    const { data, error } = await supabase.from('productos').insert([nuevoProducto]);
-    if (error) {
-      console.error("Error al crear producto:", error);
-      alert("Error al guardar producto: " + error.message);
-      return;
-    }
-    await fetchProductos();
-    alert('Producto creado exitosamente.');
-  }
-
-  async function handleEditarProducto(id: string, datosActualizados: any) {
-    const { data, error } = await supabase.from('productos').update(datosActualizados).eq('id', id);
-    if (error) {
-      console.error("Error al actualizar producto:", error);
-      alert("Error al actualizar: " + error.message);
-      return;
-    }
-    await fetchProductos();
-    alert('Producto actualizado exitosamente.');
-  }
-
-  async function handleBorrarProducto(id: string) {
-    if (!window.confirm("¿Estás seguro de eliminar este producto del inventario global?")) return;
-    
-    const { error } = await supabase.from('productos').delete().eq('id', id);
-    if (error) {
-      console.error("Error al eliminar producto:", error);
-      alert("No se pudo eliminar el producto: " + error.message);
-      return;
-    }
-    setProductos(prev => prev.filter(p => p.id !== id));
-    await fetchProductos();
-  }
-
-  const handleSaveManual = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSavingManual(true)
-    try {
-      let imagenUrl = editingProduct && editingProduct.imagenes ? editingProduct.imagenes[0] : null
-      
-      // Si el usuario subió una nueva imagen en el input file
-      if (selectedImage) {
-        imagenUrl = await uploadProductImage(selectedImage)
-      }
-
-      const payload = {
-        sku: manualForm.sku || `SKU-${Math.floor(Math.random() * 100000)}`,
-        nombre: manualForm.nombre,
-        precio_usd: Number(manualForm.precio_usd),
-        precio_bs: Number(manualForm.precio_bs) || Number(manualForm.precio_usd) * 40,
-        stock_disponible: Number(manualForm.stock),
-        imagenes: imagenUrl ? [imagenUrl] : null
-      }
-
-      if (editingProduct) {
-        // Actualizar
-        await handleEditarProducto(editingProduct.id, payload)
+  // Carga y refresco en tiempo real cuando cambia cualquier producto
+  useEffect(() => {
+    let vigente = true
+    const cargar = () => listarProductosActivos(supabase).then(resultado => {
+      if (!vigente) return
+      if (resultado.ok) {
+        setProductos(resultado.datos)
+        setErrorCarga(null)
       } else {
-        // Crear
-        const insertPayload = { ...payload, stock_reservado: 0, activo: true }
-        await handleCrearProducto(insertPayload)
+        setErrorCarga(resultado.error)
       }
-
-      closeModal()
-    } catch (err: any) {
-      alert('Error guardando el producto: ' + err.message)
-    } finally {
-      setIsSavingManual(false)
-    }
-  }
-
-  const openCreateModal = () => {
-    setEditingProduct(null)
-    setManualForm({ sku: '', nombre: '', categoria: '', precio_usd: '', precio_bs: '', stock: '' })
-    setSelectedImage(null)
-    setModalTab('manual')
-    setIsModalOpen(true)
-  }
-
-  const openEditModal = (prod: ProductoGlobal) => {
-    setEditingProduct(prod)
-    setManualForm({
-      sku: prod.sku || '',
-      nombre: prod.nombre || '',
-      categoria: '',
-      precio_usd: prod.precio_usd.toString(),
-      precio_bs: prod.precio_bs.toString(),
-      stock: prod.stock_disponible.toString(),
     })
-    setSelectedImage(null)
-    setModalTab('manual')
-    setIsModalOpen(true)
-  }
-
-  const closeModal = () => {
-    setIsModalOpen(false)
-    setEditingProduct(null)
-    setSelectedImage(null)
-  }
-
-  // ==========================================
-  // HANDLERS MASIVO (XLSX)
-  // ==========================================
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result
-        const wb = XLSX.read(bstr, { type: 'binary' })
-        const wsname = wb.SheetNames[0]
-        const ws = wb.Sheets[wsname]
-        const data = XLSX.utils.sheet_to_json(ws)
-        
-        const mappedData = data.map((row: any) => ({
-          sku: String(row.codigo || row.sku || row.SKU || `SKU-${Math.floor(Math.random() * 100000)}`),
-          nombre: String(row.nombre || row.Nombre || row.producto || 'Producto sin nombre'),
-          precio_usd: Number(row.precio_usd || row.PrecioUSD || row.usd || 0),
-          precio_bs: Number(row.precio_bs || row.PrecioBs || row.bs || 0),
-          stock_disponible: Number(row.stock || row.Stock || row.cantidad || 0),
-          stock_reservado: 0,
-          imagenes: null, // Asignado nulo según solicitud para Excel/CSV
-          activo: true
-        }))
-
-        setParsedData(mappedData)
-      } catch (err: any) {
-        alert('Error procesando el archivo: ' + err.message)
-      }
+    cargar()
+    const canal = supabase
+      .channel('productos-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, cargar)
+      .subscribe()
+    return () => {
+      vigente = false
+      supabase.removeChannel(canal)
     }
-    reader.readAsBinaryString(file)
-  }
+  }, [supabase, recargas])
 
-  const handleProcessMassive = async () => {
-    if (parsedData.length === 0) return
-    setIsProcessing(true)
+  const esEditor = ROLES_EDITORES.includes((rol ?? '').toLowerCase())
+
+  const coincidencias = useMemo(() => (productos ?? []).filter(p => coincideProducto(p, consulta)), [productos, consulta])
+  const cuentas = useMemo(() => {
+    const porEstado: Record<EstadoStock, number> = { disponible: 0, bajo: 0, agotado: 0 }
+    for (const p of coincidencias) porEstado[estadoStock(p.stock_disponible)]++
+    return porEstado
+  }, [coincidencias])
+  const visibles = filtro === 'todos' ? coincidencias : coincidencias.filter(p => estadoStock(p.stock_disponible) === filtro)
+  const unidades = useMemo(() => (productos ?? []).reduce((suma, p) => suma + Math.max(0, Number(p.stock_disponible) || 0), 0), [productos])
+
+  const cambiarVista = (siguiente: Vista) => {
+    setVista(siguiente)
     try {
-      const { error } = await supabase.from('productos').insert(parsedData)
-      if (error) throw error
-
-      alert(`Se han cargado ${parsedData.length} productos al inventario correctamente.`)
-      closeModal()
-      setParsedData([])
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      fetchProductos()
-    } catch (err: any) {
-      alert('Error importando masivamente: ' + err.message)
-    } finally {
-      setIsProcessing(false)
+      localStorage.setItem(CLAVE_VISTA, siguiente)
+    } catch {
+      // sin almacenamiento (p. ej. navegación privada): solo no se recuerda
     }
   }
+
+  const abrirNuevo = () => setFormulario({ abierto: true, producto: null })
+  const abrirEdicion = (producto: Producto) => setFormulario({ abierto: true, producto })
+
+  const alGuardar = (mensaje: string) => {
+    const producto = formulario.producto
+    setFormulario(actual => ({ ...actual, abierto: false }))
+    toast.exito(mensaje, producto ? { descripcion: producto.nombre } : undefined)
+    setRecargas(n => n + 1)
+  }
+
+  const borrar = async (producto: Producto) => {
+    const confirmado = await confirmar({
+      titulo: `¿Eliminar "${producto.nombre}"?`,
+      descripcion: 'Se borra del inventario global y no se puede deshacer.',
+      confirmar: 'Eliminar producto',
+      tono: 'peligro',
+    })
+    if (!confirmado) return
+    setEliminando(producto.id)
+    const resultado = await eliminarProducto(supabase, producto.id)
+    setEliminando(null)
+    if (!resultado.ok) {
+      toast.error(`No se pudo eliminar "${producto.nombre}"`, { descripcion: resultado.error })
+      return
+    }
+    setProductos(lista => (lista ?? []).filter(p => p.id !== producto.id))
+    toast.exito('Producto eliminado', { descripcion: producto.nombre })
+  }
+
+  // Exporta lo que se está viendo (con la búsqueda y el filtro aplicados)
+  const exportar = async () => {
+    setExportando(true)
+    try {
+      await descargarInventarioPDF(visibles)
+    } catch (error) {
+      toast.error('No se pudo generar el PDF', { descripcion: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setExportando(false)
+    }
+  }
+
+  const acciones = { esEditor, eliminando, onEditar: abrirEdicion, onEliminar: borrar }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col animate-in fade-in w-full">
-      {/* HEADER PRINCIPAL */}
-      <div className="bg-slate-900 text-white shadow-md p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {!hideHeader ? (
-          <div>
-            <h1 className="text-2xl font-black tracking-wide flex items-center gap-2">🌍 Inventario Global</h1>
-            <p className="text-slate-400 text-sm font-medium mt-1">Consulta la disponibilidad y gestiona los productos.</p>
-          </div>
-        ) : (
-          <div className="text-xl font-black tracking-wide">📦 Gestión de Inventario</div>
-        )}
-        
-        {esAdmin && (
-          <button 
-            onClick={openCreateModal}
-            className="bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 w-full md:w-auto"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
-            Añadir Producto
-          </button>
-        )}
+    <div className="mx-auto w-full max-w-[1600px] p-6 font-sans md:p-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className={`flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 ${hideHeader ? 'text-2xl' : 'text-3xl'}`}>
+            <Package className="h-6 w-6 text-indigo-600" aria-hidden />
+            Inventario global
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {productos ? `${plural(productos.length, 'producto activo', 'productos activos')} · ${plural(unidades, 'unidad disponible', 'unidades disponibles')}` : 'Cargando el catálogo…'}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Boton variante="secundario" icono={FileDown} cargando={exportando} disabled={!productos || visibles.length === 0} onClick={exportar}>
+            Exportar PDF
+          </Boton>
+          {esEditor && <Boton icono={PackagePlus} onClick={abrirNuevo}>Añadir producto</Boton>}
+        </div>
+      </header>
+
+      <div className="mt-6 flex flex-col gap-3 xl:flex-row xl:items-center">
+        <div className="relative xl:w-96">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+          <input
+            type="search"
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            aria-label="Buscar productos"
+            placeholder="Buscar por SKU o nombre"
+            className={`${claseEntrada} h-10 pl-10 pr-9 [&::-webkit-search-cancel-button]:hidden`}
+          />
+          {busqueda && (
+            <button
+              type="button"
+              onClick={() => setBusqueda('')}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          )}
+        </div>
+        <Pestanas
+          etiqueta="Filtrar por disponibilidad"
+          valor={filtro}
+          onCambiar={setFiltro}
+          opciones={[
+            { id: 'todos', etiqueta: 'Todos', cuenta: productos ? coincidencias.length : undefined },
+            { id: 'disponible', etiqueta: 'En stock', cuenta: productos ? cuentas.disponible : undefined },
+            { id: 'bajo', etiqueta: `Stock bajo (≤ ${UMBRAL_STOCK_BAJO})`, cuenta: productos ? cuentas.bajo : undefined },
+            { id: 'agotado', etiqueta: 'Agotados', cuenta: productos ? cuentas.agotado : undefined },
+          ]}
+        />
+        <Pestanas
+          className="xl:ml-auto"
+          etiqueta="Forma de ver el catálogo"
+          valor={vista}
+          onCambiar={cambiarVista}
+          opciones={[
+            { id: 'tarjetas', etiqueta: 'Tarjetas', icono: LayoutGrid },
+            { id: 'tabla', etiqueta: 'Tabla', icono: List },
+          ]}
+        />
       </div>
 
-      {/* CONTENIDO PRINCIPAL (CUADRÍCULA) */}
-      <main className="flex-1 p-6 md:p-8 w-full max-w-[1600px] mx-auto">
-        <div className="mb-6 flex gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">🔍</div>
-            <input 
-              type="search"
-              placeholder="Buscar por código SKU o nombre del producto..."
-              className="w-full h-12 pl-12 pr-4 rounded-xl border-none bg-transparent outline-none font-medium text-slate-700"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+      <section className="mt-5" aria-live="polite" aria-busy={productos === null}>
+        {!productos && errorCarga ? (
+          <div role="alert" className="flex flex-col items-center gap-3 rounded-2xl bg-white px-6 py-14 text-center ring-1 ring-slate-200">
+            <CircleX className="h-8 w-8 text-red-500" aria-hidden />
+            <p className="max-w-md text-sm text-slate-600">{errorCarga}</p>
+            <Boton variante="secundario" onClick={() => setRecargas(n => n + 1)}>Reintentar</Boton>
           </div>
-          <button 
-            onClick={exportarInventarioPDF}
-            className="hidden md:flex bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-2.5 px-6 rounded-xl transition-colors items-center justify-center gap-2 border border-indigo-200"
-          >
-            Exportar PDF
-          </button>
+        ) : !productos ? (
+          vista === 'tarjetas' ? <TarjetasEsqueleto /> : <TablaEsqueleto />
+        ) : visibles.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-white px-6 py-14 text-center ring-1 ring-slate-200">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+              {productos.length === 0 ? <Package className="h-6 w-6" aria-hidden /> : <SearchX className="h-6 w-6" aria-hidden />}
+            </span>
+            <p className="font-medium text-slate-900">{productos.length === 0 ? 'El catálogo está vacío' : 'Ningún producto coincide'}</p>
+            <p className="text-sm text-slate-500">
+              {productos.length === 0 ? 'Añade productos uno a uno o importa un Excel.' : 'Prueba con otro SKU o nombre, o quita el filtro.'}
+            </p>
+            {productos.length === 0 && esEditor && <Boton icono={PackagePlus} onClick={abrirNuevo}>Añadir producto</Boton>}
+          </div>
+        ) : vista === 'tarjetas' ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {visibles.map(producto => <TarjetaProducto key={producto.id} producto={producto} {...acciones} />)}
+          </div>
+        ) : (
+          <TablaProductos productos={visibles} {...acciones} />
+        )}
+      </section>
+
+      <ProductoFormModal
+        abierto={formulario.abierto}
+        producto={formulario.producto}
+        onCerrar={() => setFormulario(actual => ({ ...actual, abierto: false }))}
+        onGuardado={alGuardar}
+      />
+    </div>
+  )
+}
+
+interface AccionesProducto {
+  esEditor: boolean
+  eliminando: string | null
+  onEditar: (producto: Producto) => void
+  onEliminar: (producto: Producto) => void
+}
+
+function TarjetaProducto({ producto, esEditor, eliminando, onEditar, onEliminar }: { producto: Producto } & AccionesProducto) {
+  return (
+    <article className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80 transition-shadow hover:shadow-md">
+      {/* overflow-hidden: una foto cuadrada no debe estirar la caja 3:2 */}
+      <div className="relative aspect-[3/2] overflow-hidden bg-slate-50">
+        <ImagenProducto url={imagenPrincipal(producto)} nombre={producto.nombre} />
+        <div className="absolute left-3 top-3">
+          <InsigniaStock stock={producto.stock_disponible} />
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <p className="font-mono text-xs text-slate-500">{producto.sku}</p>
+        <h3 className="mt-1 line-clamp-2 font-medium leading-snug text-slate-900">{producto.nombre}</h3>
+
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs text-slate-500">Precio USD</p>
+            <p className="text-xl font-semibold tracking-tight text-slate-900">{usd(producto.precio_usd)}</p>
+          </div>
+          <PrecioBcv producto={producto} />
         </div>
 
-        {isLoading ? (
-          <div className="text-center font-bold text-slate-400 mt-20 animate-pulse">Cargando base de datos...</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProductos.map(prod => {
-              let badgeClass = 'bg-red-100 text-red-700 border-red-200'
-              let badgeText = 'Agotado'
-              if (prod.stock_disponible > 10) {
-                badgeClass = 'bg-green-100 text-green-700 border-green-200'
-                badgeText = 'En Stock'
-              } else if (prod.stock_disponible > 0) {
-                badgeClass = 'bg-yellow-100 text-yellow-700 border-yellow-200'
-                badgeText = 'Stock Bajo'
-              }
+        <dl className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-200/70 text-center ring-1 ring-slate-200/70">
+          <div className="bg-slate-50 px-2 py-2">
+            <dt className="text-[11px] text-slate-500">Disponible</dt>
+            <dd className="font-semibold tabular-nums text-slate-900">{numero(Number(producto.stock_disponible) || 0)}</dd>
+          </div>
+          <div className="bg-slate-50 px-2 py-2">
+            <dt className="text-[11px] text-slate-500">Reservado</dt>
+            <dd className="font-semibold tabular-nums text-slate-900">{numero(Number(producto.stock_reservado) || 0)}</dd>
+          </div>
+        </dl>
 
-              const imageUrl = prod.imagenes && prod.imagenes.length > 0 ? prod.imagenes[0] : null
-
-              return (
-                <div key={prod.id} className="bg-white rounded-2xl shadow-sm hover:shadow-lg border border-slate-200 overflow-hidden flex flex-col transition-all group">
-                  <div className="p-4 flex justify-between items-center border-b border-slate-100">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${badgeClass}`}>{badgeText}</span>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{prod.sku}</span>
-                  </div>
-                  <div className="h-48 w-full bg-slate-50 flex items-center justify-center border-b border-slate-100 overflow-hidden p-2 relative">
-                    {imageUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={imageUrl} alt={prod.nombre} className="h-full w-full object-contain rounded-lg mix-blend-multiply" />
-                    ) : (
-                      <div className="text-slate-300 flex flex-col items-center">
-                        <svg className="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        <span className="text-xs font-bold uppercase tracking-widest">Sin Imagen</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-5 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h3 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-4">{prod.nombre}</h3>
-                      <div className="flex justify-between items-end mb-4">
-                        <div>
-                          <p className="text-2xl font-black text-indigo-700 leading-none">${prod.precio_usd.toFixed(2)}</p>
-                          <p className="text-sm font-bold text-slate-400 mt-1">Bs. {prod.precio_bs.toFixed(2)}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">Disponibilidad:</span>
-                        <span className="font-black bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">CANT: {prod.stock_disponible}</span>
-                      </div>
-                      
-                      {esAdmin && (
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => openEditModal(prod)} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors flex items-center gap-1 border border-transparent hover:border-indigo-200">
-                            ✏️ Editar
-                          </button>
-                          <button onClick={() => handleBorrarProducto(prod.id)} className="text-sm font-bold text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 border border-transparent hover:border-red-200">
-                            🗑️ Eliminar
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-            {filteredProductos.length === 0 && (
-              <div className="col-span-full p-12 text-center text-slate-400 font-bold bg-white rounded-2xl border border-slate-200">
-                No se encontraron productos coincidentes.
-              </div>
-            )}
+        {esEditor && (
+          <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
+            <Boton variante="secundario" tamano="sm" icono={Pencil} onClick={() => onEditar(producto)} className="flex-1">Editar</Boton>
+            <BotonEliminar producto={producto} eliminando={eliminando} onEliminar={onEliminar} />
           </div>
         )}
-      </main>
+      </div>
+    </article>
+  )
+}
 
-      {/* MODAL AÑADIR/EDITAR PRODUCTO */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
-              <h2 className="text-2xl font-black tracking-wide">
-                {editingProduct ? 'Editar Producto' : 'Añadir Producto'}
-              </h2>
-              <button onClick={closeModal} className="text-slate-400 hover:text-white transition-colors">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-              </button>
-            </div>
-            
-            {!editingProduct && (
-              <div className="flex border-b border-slate-200 bg-slate-50">
-                <button 
-                  onClick={() => setModalTab('manual')} 
-                  className={`flex-1 py-4 font-bold text-sm ${modalTab === 'manual' ? 'text-indigo-700 border-b-4 border-indigo-700 bg-white' : 'text-slate-500 hover:bg-slate-100'}`}
-                >
-                  Crear Manual
-                </button>
-                <button 
-                  onClick={() => setModalTab('masivo')} 
-                  className={`flex-1 py-4 font-bold text-sm ${modalTab === 'masivo' ? 'text-indigo-700 border-b-4 border-indigo-700 bg-white' : 'text-slate-500 hover:bg-slate-100'}`}
-                >
-                  Cargar Excel / CSV
-                </button>
-              </div>
-            )}
-
-            <div className="p-6 max-h-[65vh] overflow-y-auto bg-white">
-              {modalTab === 'manual' && (
-                <form onSubmit={handleSaveManual} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Código / SKU</label>
-                      <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" placeholder="Autogenerado si vacío" value={manualForm.sku} onChange={e => setManualForm({...manualForm, sku: e.target.value})} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Stock Disponible</label>
-                      <input required type="number" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" value={manualForm.stock} onChange={e => setManualForm({...manualForm, stock: e.target.value})} />
-                    </div>
+function TablaProductos({ productos, esEditor, eliminando, onEditar, onEliminar }: { productos: Producto[] } & AccionesProducto) {
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80">
+      <table className="w-full min-w-[760px] text-sm">
+        <thead className="bg-slate-50/80 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <tr>
+            <th scope="col" className="px-5 py-3">Producto</th>
+            <th scope="col" className="px-5 py-3 text-right">Precio USD</th>
+            <th scope="col" className="px-5 py-3 text-right">Precio BCV</th>
+            <th scope="col" className="px-5 py-3">Disponible</th>
+            <th scope="col" className="px-5 py-3 text-right">Reservado</th>
+            {esEditor && <th scope="col" className="px-5 py-3"><span className="sr-only">Acciones</span></th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {productos.map(producto => (
+            <tr key={producto.id} className="transition-colors hover:bg-slate-50/70">
+              <td className="px-5 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-slate-50 ring-1 ring-slate-200">
+                    <ImagenProducto url={imagenPrincipal(producto)} nombre={producto.nombre} compacta />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nombre del Producto</label>
-                    <input required type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" value={manualForm.nombre} onChange={e => setManualForm({...manualForm, nombre: e.target.value})} />
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-900">{producto.nombre}</p>
+                    <p className="font-mono text-xs text-slate-500">{producto.sku}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Precio $ USD</label>
-                      <input required type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" value={manualForm.precio_usd} onChange={e => setManualForm({...manualForm, precio_usd: e.target.value})} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Precio BCV</label>
-                      <input type="number" step="0.01" min="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-800 outline-none focus:border-indigo-500" placeholder="Autocalculado" value={manualForm.precio_bs} onChange={e => setManualForm({...manualForm, precio_bs: e.target.value})} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Subir Imagen del Producto (Opcional)</label>
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={e => setSelectedImage(e.target.files?.[0] || null)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-600 outline-none focus:border-indigo-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all" 
-                    />
-                    {editingProduct?.imagenes && !selectedImage && (
-                      <p className="text-xs font-bold text-indigo-500 mt-2">Imagen actual preservada. Sube una nueva para reemplazarla.</p>
-                    )}
-                  </div>
-                  
-                  <button type="submit" disabled={isSavingManual} className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-black tracking-wide py-4 rounded-xl mt-4 shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                    {isSavingManual ? 'Guardando en Base de Datos...' : (editingProduct ? 'Actualizar Producto' : 'Guardar Nuevo Producto')}
-                  </button>
-                </form>
-              )}
-
-              {modalTab === 'masivo' && !editingProduct && (
-                <div className="space-y-4">
-                  <div className="border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-2xl p-8 text-center relative hover:bg-indigo-100 transition-colors cursor-pointer">
-                    <input type="file" ref={fileInputRef} accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                    <svg className="w-12 h-12 text-indigo-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                    <p className="font-bold text-slate-700 text-lg">Haz clic o arrastra tu archivo Excel / CSV aquí</p>
-                    <p className="text-slate-500 text-sm mt-2">Columnas esperadas: codigo, nombre, precio_usd, precio_bs, stock, imagen_url</p>
-                  </div>
-
-                  {parsedData.length > 0 && (
-                    <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="bg-slate-100 px-4 py-2 font-bold text-sm text-slate-700 flex justify-between">
-                        <span>Previsualización (Primeros 5 registros)</span>
-                        <span className="text-indigo-600">{parsedData.length} productos detectados</span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm whitespace-nowrap">
-                          <thead className="bg-slate-50 border-b border-slate-200">
-                            <tr>
-                              <th className="p-3 font-bold text-slate-600">SKU</th>
-                              <th className="p-3 font-bold text-slate-600">Nombre</th>
-                              <th className="p-3 font-bold text-slate-600">Stock</th>
-                              <th className="p-3 font-bold text-slate-600">USD</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {parsedData.slice(0, 5).map((row, i) => (
-                              <tr key={i} className="hover:bg-slate-50">
-                                <td className="p-3 text-slate-500 font-mono">{row.sku}</td>
-                                <td className="p-3 font-bold text-slate-800">{row.nombre}</td>
-                                <td className="p-3 text-slate-600">{row.stock_disponible}</td>
-                                <td className="p-3 text-indigo-600 font-bold">${row.precio_usd}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  <button 
-                    onClick={handleProcessMassive} 
-                    disabled={isProcessing || parsedData.length === 0} 
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl mt-4 shadow-lg transition-colors disabled:opacity-50"
-                  >
-                    {isProcessing ? 'Importando...' : `Procesar e Importar ${parsedData.length} Productos`}
-                  </button>
                 </div>
+              </td>
+              <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-900">{usd(producto.precio_usd)}</td>
+              <td className="whitespace-nowrap px-5 py-3 text-right"><PrecioBcv producto={producto} compacto /></td>
+              <td className="whitespace-nowrap px-5 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-10 font-semibold tabular-nums text-slate-900">{numero(Number(producto.stock_disponible) || 0)}</span>
+                  <InsigniaStock stock={producto.stock_disponible} />
+                </div>
+              </td>
+              <td className="whitespace-nowrap px-5 py-3 text-right tabular-nums text-slate-600">{numero(Number(producto.stock_reservado) || 0)}</td>
+              {esEditor && (
+                <td className="px-5 py-3">
+                  <div className="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onEditar(producto)}
+                      aria-label={`Editar ${producto.nombre}`}
+                      title="Editar"
+                      className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden />
+                    </button>
+                    <BotonEliminar producto={producto} eliminando={eliminando} onEliminar={onEliminar} soloIcono />
+                  </div>
+                </td>
               )}
-            </div>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Precio con pago en Bs. a tasa BCV: el diferencial del owner o, si no hay, el mismo precio USD */
+function PrecioBcv({ producto, compacto = false }: { producto: Producto; compacto?: boolean }) {
+  const precioBcv = precioSegunMoneda(producto, 'BCV')
+  const diferencial = Number(producto.precio_bs) > 0 && precioBcv !== Number(producto.precio_usd)
+  const variacion = Number(producto.precio_usd) > 0 ? (precioBcv - Number(producto.precio_usd)) / Number(producto.precio_usd) : 0
+  return (
+    <div className="text-right">
+      {!compacto && <p className="text-xs text-slate-500">Precio BCV</p>}
+      <p className={`font-semibold tabular-nums ${diferencial ? 'text-slate-900' : 'text-slate-500'} ${compacto ? '' : 'text-sm'}`}>{usd(precioBcv)}</p>
+      <p className={`text-[11px] ${diferencial ? 'font-medium text-indigo-600' : 'text-slate-400'}`}>
+        {diferencial ? `${variacion > 0 ? '+' : ''}${(variacion * 100).toFixed(variacion !== 0 && Math.abs(variacion) < 0.1 ? 1 : 0)}% diferencial` : 'Sin diferencial'}
+      </p>
+    </div>
+  )
+}
+
+function InsigniaStock({ stock }: { stock: number | null }) {
+  const estilo = ESTADOS_STOCK[estadoStock(stock)]
+  const Icono = estilo.icono
+  return (
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${estilo.clase}`}>
+      <Icono className="h-3.5 w-3.5" aria-hidden />
+      {estilo.etiqueta}
+    </span>
+  )
+}
+
+function BotonEliminar({ producto, eliminando, onEliminar, soloIcono = false }: {
+  producto: Producto
+  eliminando: string | null
+  onEliminar: (producto: Producto) => void
+  soloIcono?: boolean
+}) {
+  const propio = eliminando === producto.id
+  const Icono = propio ? LoaderCircle : Trash2
+  return (
+    <button
+      type="button"
+      onClick={() => onEliminar(producto)}
+      disabled={eliminando !== null}
+      aria-label={`Eliminar ${producto.nombre}`}
+      title="Eliminar"
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 ${soloIcono ? 'p-2' : 'h-8 px-2.5 ring-1 ring-inset ring-slate-200'}`}
+    >
+      <Icono className={`h-4 w-4 ${propio ? 'animate-spin' : ''}`} aria-hidden />
+    </button>
+  )
+}
+
+function TarjetasEsqueleto() {
+  return (
+    <div aria-hidden className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80">
+          <Bloque className="aspect-[3/2] w-full rounded-none" />
+          <div className="space-y-2 p-4">
+            <Bloque className="h-3 w-20" />
+            <Bloque className="h-4 w-full" />
+            <Bloque className="h-6 w-24" />
+            <Bloque className="h-12 w-full rounded-xl" />
           </div>
         </div>
-      )}
+      ))}
+    </div>
+  )
+}
+
+function TablaEsqueleto() {
+  return (
+    <div aria-hidden className="divide-y divide-slate-100 rounded-2xl bg-white ring-1 ring-slate-200/80">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className="flex items-center gap-4 px-5 py-3">
+          <Bloque className="h-11 w-11" />
+          <Bloque className="h-4 w-64" />
+          <Bloque className="ml-auto h-4 w-20" />
+          <Bloque className="h-4 w-20" />
+          <Bloque className="h-5 w-24" />
+        </div>
+      ))}
     </div>
   )
 }

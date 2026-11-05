@@ -1,9 +1,18 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createSessionClient } from '@/lib/supabase/server';
+import { esRolValido } from '@/lib/domain/roles';
 
 export async function POST(request: Request) {
   try {
-    const { email, password, nombre, rol, cedula, telefono, direccion } = await request.json();
+    // 0. Solo un owner autenticado puede crear usuarios.
+    //    getUser() valida contra Supabase Auth el token de la cookie de sesión (leer la cookie no basta).
+    const supabaseSession = await createSessionClient();
+    const { data: { user: solicitante }, error: sessionError } = await supabaseSession.auth.getUser();
+
+    if (sessionError || !solicitante) {
+      return NextResponse.json({ error: 'No autenticado.' }, { status: 401 });
+    }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,6 +28,28 @@ export async function POST(request: Request) {
         persistSession: false,
       },
     });
+
+    // El rol se lee con la service role para no depender de las políticas RLS de 'usuarios'
+    const { data: perfilSolicitante, error: perfilError } = await supabaseAdmin
+      .from('usuarios')
+      .select('rol')
+      .eq('id', solicitante.id)
+      .maybeSingle();
+
+    if (perfilError) {
+      console.error('Error verificando el rol del solicitante:', perfilError);
+      return NextResponse.json({ error: 'No se pudo verificar el rol del solicitante.' }, { status: 500 });
+    }
+
+    if (perfilSolicitante?.rol !== 'owner') {
+      return NextResponse.json({ error: 'Solo un owner puede crear usuarios.' }, { status: 403 });
+    }
+
+    const { email, password, nombre, rol, cedula, telefono, direccion } = await request.json();
+
+    if (!esRolValido(rol)) {
+      return NextResponse.json({ error: 'Rol inválido.' }, { status: 400 });
+    }
 
     // 1. Create the user using admin API
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -42,7 +73,7 @@ export async function POST(request: Request) {
       id: authData.user.id,
       email: email,
       nombre: nombre || email.split('@')[0],
-      rol: rol || 'Vendedor',
+      rol,
       cedula_rif: cedula || null,
       telefono: telefono || null,
       direccion: direccion || null,
@@ -57,7 +88,7 @@ export async function POST(request: Request) {
       await supabaseAdmin.from('usuarios').update({
         email: email,
         nombre: nombre || email.split('@')[0],
-        rol: rol || 'Vendedor',
+        rol,
         cedula_rif: cedula || null,
         telefono: telefono || null,
         direccion: direccion || null
