@@ -7,6 +7,7 @@ import { cargarPerfil, type PerfilUsuario } from '@/lib/services/usuarios'
 
 // Componentes
 import LoginForm from '@/components/LoginForm'
+import { PantallaCarga } from '@/components/ui/Acceso'
 import VendedorPOS from '@/components/VendedorPOS'
 import AdminDashboard from '@/components/AdminDashboard'
 import AlmacenDashboard from '@/components/AlmacenDashboard'
@@ -85,11 +86,7 @@ export default function AppHub() {
 
   // --- ESTADOS NO AUTENTICADOS ---
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white font-bold text-2xl animate-pulse tracking-widest">Iniciando ERP...</div>
-      </div>
-    )
+    return <PantallaCarga />
   }
 
   if (!session || !profile) {

@@ -1,26 +1,165 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* El ERP solo tiene tema claro: cada pantalla pinta su propio fondo (el login y la carga son oscuros) */
+body {
+  background: #f1f5f9; /* slate-100 */
+  color: #0f172a; /* slate-900 */
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Con un modal abierto (<dialog> modal) la página de fondo no se desplaza */
+html:has(dialog:modal) {
+  overflow: hidden;
+}
+
+/* Acceso "liquid morph" (login y pantalla de carga): components/ui/Acceso.tsx y components/LoginForm.tsx.
+   Todo se mueve con transform/opacity; solo el border-radius de los blobs y de la gota de la marca cambia
+   en pintura (nunca toca el layout). Cada uso lleva su motion-reduce:animate-none. */
+@theme {
+  /* Rebote corto: se pasa un poco y se asienta, como una gota */
+  --ease-liquido: cubic-bezier(0.34, 1.35, 0.64, 1);
+  /* Frenado largo y sin rebote, para recorridos más largos */
+  --ease-suave: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Blobs del fondo: ciclos largos y desfasados para que nunca se sincronicen */
+  --animate-blob-a: blob-a 28s ease-in-out infinite;
+  --animate-blob-b: blob-b 34s ease-in-out infinite;
+  --animate-blob-c: blob-c 41s ease-in-out infinite;
+  /* Gota de la marca */
+  --animate-gota: gota 14s ease-in-out infinite;
+  /* Halo detrás de la tarjeta */
+  --animate-respira: respira 9s ease-in-out infinite;
+  /* Entrada de bloques y avisos: suben, se pasan un poco y se asientan */
+  --animate-aparece: aparece 0.6s cubic-bezier(0.34, 1.35, 0.64, 1) backwards;
+  /* Botón verificando: el color fluye sin costura */
+  --animate-fluir: fluir 2.2s linear infinite;
+  /* Gotas gooey de la pantalla de carga */
+  --animate-goo-a: goo-a 1.8s ease-in-out infinite;
+  --animate-goo-b: goo-b 1.8s ease-in-out infinite;
+  --animate-goo-c: goo-c 1.8s ease-in-out infinite;
+
+  @keyframes blob-a {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg) scale(1, 1);
+      border-radius: 62% 38% 46% 54% / 58% 44% 56% 42%;
+    }
+    33% {
+      transform: translate3d(9vw, 7vh, 0) rotate(50deg) scale(1.1, 0.92);
+      border-radius: 38% 62% 58% 42% / 44% 58% 42% 56%;
+    }
+    66% {
+      transform: translate3d(3vw, 14vh, 0) rotate(110deg) scale(0.94, 1.08);
+      border-radius: 54% 46% 36% 64% / 60% 38% 62% 40%;
+    }
+  }
+
+  @keyframes blob-b {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg) scale(1, 1);
+      border-radius: 44% 56% 60% 40% / 52% 40% 60% 48%;
+    }
+    40% {
+      transform: translate3d(-10vw, -8vh, 0) rotate(-70deg) scale(1.12, 0.9);
+      border-radius: 60% 40% 38% 62% / 40% 62% 38% 60%;
+    }
+    75% {
+      transform: translate3d(-4vw, -15vh, 0) rotate(-140deg) scale(0.92, 1.1);
+      border-radius: 36% 64% 52% 48% / 58% 46% 54% 42%;
+    }
+  }
+
+  @keyframes blob-c {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg) scale(1, 1);
+      border-radius: 50% 50% 38% 62% / 46% 58% 42% 54%;
+    }
+    50% {
+      transform: translate3d(-8vw, 10vh, 0) rotate(90deg) scale(1.15, 0.88);
+      border-radius: 36% 64% 56% 44% / 62% 38% 62% 38%;
+    }
+  }
+
+  @keyframes gota {
+    0%,
+    100% {
+      transform: rotate(0deg);
+      border-radius: 42% 58% 55% 45% / 52% 44% 56% 48%;
+    }
+    50% {
+      transform: rotate(8deg);
+      border-radius: 58% 42% 44% 56% / 46% 56% 44% 54%;
+    }
+  }
+
+  @keyframes respira {
+    0%,
+    100% {
+      opacity: 0.7;
+      transform: scale(1, 1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.04, 1.06);
+    }
+  }
+
+  @keyframes aparece {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* El degradado del botón es periódico (2 periodos en 200 % de ancho): al desplazarlo un periodo no hay salto */
+  @keyframes fluir {
+    from {
+      background-position: 0% 0%;
+    }
+    to {
+      background-position: 100% 0%;
+    }
+  }
+
+  /* Las gotas se acercan, se funden (el filtro gooey las une) y se separan; unidades = px del viewBox del SVG */
+  @keyframes goo-a {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(11px, 0) scale(1.2);
+    }
+  }
+
+  @keyframes goo-b {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(0, -3px) scale(0.75);
+    }
+  }
+
+  @keyframes goo-c {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(-11px, 0) scale(1.2);
+    }
+  }
 }

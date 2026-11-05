@@ -9,7 +9,9 @@ import VendedorPOS from '@/components/VendedorPOS'
 import GlobalInventory from '@/components/GlobalInventory'
 import UserManagement from '@/components/UserManagement'
 import ClientsManager from '@/components/ClientsManager'
+import ExecutiveDashboard from '@/components/ExecutiveDashboard'
 import type { Rol } from '@/lib/domain/roles'
+import { conEstadoEfectivo, esVentaValida, estaAnulada, etiquetaEstado, normalizarEstado } from '@/lib/domain/ordenes'
 import { Crown, BarChart, Globe, CreditCard, Truck, ShoppingCart, Users, Briefcase, FileText, Trash2, CheckCircle2, X, Menu, Search, Bell, HelpCircle, PackageCheck, ClipboardCheck } from 'lucide-react'
 
 // ============================================================================
@@ -29,6 +31,7 @@ interface Metricas {
 interface OrdenReporte {
   id: string
   estado: string
+  estado_despacho?: string | null
   total_usd: number
   total_bs: number
   fecha_creacion: string
@@ -88,10 +91,11 @@ export default function OwnerDashboard({
   const fetchMetrics = useCallback(async () => {
     if (supabaseUrl === 'https://placeholder.supabase.co') return
     try {
-      const { data, error } = await supabase.from('ordenes').select('estado');
+      const { data, error } = await supabase.from('ordenes').select('estado, estado_despacho');
       if (error) throw error;
-      
-      const ordenes = data || [];
+
+      // Una orden rechazada por el almacén ya no está pendiente de despacho (ver estadoEfectivo)
+      const ordenes = (data || []).map(conEstadoEfectivo);
       const pendientesRevision = ordenes.filter(o => ['pendiente', 'pendiente_pago', 'esperando_aprobacion'].includes(o.estado?.toLowerCase())).length;
       const pendientesAlmacen = ordenes.filter(o => ['aprobado', 'en_proceso'].includes(o.estado?.toLowerCase())).length;
       const entregados = ordenes.filter(o => o.estado?.toLowerCase() === 'entregado').length;
@@ -128,7 +132,7 @@ export default function OwnerDashboard({
       const { data: ordenesData, error: dbError } = await supabase
         .from('ordenes')
         .select(`
-          id, estado, total_usd, total_bs, fecha_creacion,
+          id, estado, estado_despacho, total_usd, total_bs, fecha_creacion,
           cliente:clientes!fk_ordenes_cliente ( nombre ),
           vendedor:usuarios!vendedor_id ( nombre ),
           orden_items ( cantidad, productos ( nombre ) )
@@ -142,17 +146,16 @@ export default function OwnerDashboard({
       if (dbError) throw new Error(`Fallo consultando BD: ${dbError.message}`)
       if (!ordenes || ordenes.length === 0) throw new Error('No hay órdenes registradas en ese rango de fechas.')
 
-      // Normalización y filtrado por estado
-      ordenes = ordenes.filter((orden) => {
-        const estadoStr = (orden.estado || '').toLowerCase().trim();
+      // Normalización (incluido el rechazo del almacén) y filtrado por estado
+      ordenes = ordenes.map(conEstadoEfectivo).filter((orden) => {
         if (estadoFiltro === 'TODAS') return true;
         if (estadoFiltro === 'APROBADOS') {
-          return ['aprobado', 'aprobados', 'aprobadas', 'entregado', 'aprobado_despacho'].includes(estadoStr);
+          return esVentaValida(orden.estado);
         }
         if (estadoFiltro === 'RECHAZADOS') {
-          return ['rechazado', 'rechazados', 'rechazadas', 'cancelado'].includes(estadoStr);
+          return estaAnulada(orden.estado);
         }
-        return estadoStr === estadoFiltro.toLowerCase();
+        return normalizarEstado(orden.estado) === estadoFiltro.toLowerCase();
       });
 
       if (ordenes.length === 0) throw new Error('No hay órdenes que coincidan con el filtro seleccionado.')
@@ -170,24 +173,28 @@ export default function OwnerDashboard({
 
       let totalUSD = 0;
       let totalBS = 0;
+      // En 'Todas' las anuladas se listan, pero no suman: no son ventas
+      const sumaEnTotales = (orden: OrdenReporte) => estadoFiltro !== 'TODAS' || !estaAnulada(orden.estado)
 
       const tableColumn = ["ID Orden", "Fecha", "Cliente", "Vendedor", "Productos (Cant.)", "Total USD", "Total BS", "Estado"]
       const tableRows = ordenes.map(orden => {
-        totalUSD += Number(orden.total_usd);
-        totalBS += Number(orden.total_bs);
+        if (sumaEnTotales(orden)) {
+          totalUSD += Number(orden.total_usd);
+          totalBS += Number(orden.total_bs);
+        }
         
         const fecha = new Date(orden.fecha_creacion).toLocaleDateString()
         const resumenProductos = orden.orden_items.map(item => `${item.cantidad}x ${item.productos?.nombre || 'N/A'}`).join('\n')
         return [
           orden.id.split('-')[0], fecha, orden.cliente?.nombre || 'Desconocido', orden.vendedor?.nombre || 'Desconocido',
-          resumenProductos, `$${orden.total_usd.toFixed(2)}`, `Bs. ${orden.total_bs.toFixed(2)}`, orden.estado.replace('_', ' ')
+          resumenProductos, `$${orden.total_usd.toFixed(2)}`, `Bs. ${orden.total_bs.toFixed(2)}`, etiquetaEstado(orden.estado)
         ]
       })
 
       autoTable(doc, {
         head: [tableColumn], 
         body: tableRows, 
-        foot: [['', '', '', '', 'TOTALES:', `$${totalUSD.toFixed(2)}`, `Bs. ${totalBS.toFixed(2)}`, '']],
+        foot: [['', '', '', '', estadoFiltro === 'TODAS' ? 'TOTALES (sin anuladas):' : 'TOTALES:', `$${totalUSD.toFixed(2)}`, `Bs. ${totalBS.toFixed(2)}`, '']],
         startY: 90,
         styles: { fontSize: 9, cellPadding: 4 },
         headStyles: { fillColor: [30, 58, 138] },
@@ -345,7 +352,10 @@ export default function OwnerDashboard({
           {/* PESTAÑA 1: MÉTRICAS (PROPIO DEL OWNER) */}
           {activeTab === 'metricas' && role === 'owner' && (
             <div className="max-w-6xl mx-auto animate-in fade-in">
-              
+              <div className="mb-10">
+                <ExecutiveDashboard />
+              </div>
+
               {/* Tarjetas Superiores */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 
